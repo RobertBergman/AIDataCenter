@@ -1,0 +1,22 @@
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: nvidia
+handler: nvidia
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nccl-defaults
+  namespace: gpu-operator
+data:
+  nccl.conf: |
+    # Defaults for multi-rail RoCEv2 on 8× B200
+    NCCL_IB_DISABLE=0
+    NCCL_NET_GDR_LEVEL=PHB
+    NCCL_P2P_LEVEL=NVL
+    NCCL_SHM_DISABLE=0
+    # Pin after rail netdevs are named consistently
+    # NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
+    NCCL_SOCKET_IFNAME=mgmt0
+    NCCL_DEBUG=WARN

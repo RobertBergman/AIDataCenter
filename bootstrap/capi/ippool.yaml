@@ -1,0 +1,26 @@
+apiVersion: ipam.metal3.io/v1alpha1
+kind: IPPool
+metadata:
+  name: mgmt-pool
+  namespace: metal3
+spec:
+  clusterName: ai-cluster
+  namePrefix: ai-mgmt
+  pools:
+    - start: 10.10.0.21
+      end: 10.10.0.199
+      prefix: 24
+      gateway: 10.10.0.1
+  prefix: 24
+  gateway: 10.10.0.1
+  dnsServers:
+    - 10.10.0.10
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: metal3
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

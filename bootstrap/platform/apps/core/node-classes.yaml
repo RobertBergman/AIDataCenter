@@ -1,0 +1,29 @@
+# Label conventions for schedulers / topology
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-class-policy
+  namespace: platform-system
+data:
+  policy.yaml: |
+    roles:
+      control-plane:
+        labels:
+          node.kubernetes.io/role: control-plane
+          topology.kubernetes.io/zone: boot
+        taints:
+          - key: node-role.kubernetes.io/control-plane
+            effect: NoSchedule
+      gpu-worker:
+        labels:
+          node.kubernetes.io/role: gpu-worker
+          nvidia.com/gpu.present: "true"
+          feature.node.kubernetes.io/rdma.capable: "true"
+        taints:
+          - key: nvidia.com/gpu
+            value: "true"
+            effect: NoSchedule
+      utility:
+        labels:
+          node.kubernetes.io/role: utility
+          topology.kubernetes.io/zone: boot

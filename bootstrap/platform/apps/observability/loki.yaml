@@ -1,0 +1,62 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  interval: 1h
+  url: https://grafana.github.io/helm-charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: loki
+      version: 6.27.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+  values:
+    deploymentMode: SimpleScalable
+    loki:
+      auth_enabled: false
+      commonConfig:
+        replication_factor: 2
+      schemaConfig:
+        configs:
+          - from: "2024-01-01"
+            store: tsdb
+            object_store: s3
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+      storage:
+        type: s3
+        bucketNames:
+          chunks: loki-chunks
+          ruler: loki-ruler
+          admin: loki-admin
+        s3:
+          # Point at inference/archive MinIO or Ceph RGW when STOR is live
+          endpoint: minio.storage.svc:9000
+          secretAccessKey: ${LOKI_S3_SECRET}
+          accessKeyId: ${LOKI_S3_KEY}
+          s3ForcePathStyle: true
+          insecure: true
+    gateway:
+      enabled: true
+    backend:
+      replicas: 2
+    read:
+      replicas: 2
+    write:
+      replicas: 2
+    monitoring:
+      serviceMonitor:
+        enabled: true

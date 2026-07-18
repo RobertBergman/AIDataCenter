@@ -1,0 +1,24 @@
+# Secrets / local env
+.env
+*.pem
+*.key
+kubeconfig*
+**/generated/baremetalhosts.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Temporary
+/tmp/
+*.tmp
+.cache/

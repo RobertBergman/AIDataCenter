@@ -1,0 +1,120 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: ai-cluster-cp
+  namespace: metal3
+spec:
+  replicas: 3
+  version: v1.32.2
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: Metal3MachineTemplate
+      name: ai-cluster-cp
+  kubeadmConfigSpec:
+    initConfiguration:
+      nodeRegistration:
+        criSocket: unix:///var/run/containerd/containerd.sock
+        kubeletExtraArgs:
+          node-labels: "node.kubernetes.io/role=control-plane,topology.kubernetes.io/rack=BOOT"
+          cloud-provider: external
+    joinConfiguration:
+      nodeRegistration:
+        criSocket: unix:///var/run/containerd/containerd.sock
+        kubeletExtraArgs:
+          node-labels: "node.kubernetes.io/role=control-plane,topology.kubernetes.io/rack=BOOT"
+          cloud-provider: external
+    clusterConfiguration:
+      apiServer:
+        certSANs:
+          - 10.10.0.20
+          - api.ai.local
+          - localhost
+          - 127.0.0.1
+        extraArgs:
+          audit-log-path: /var/log/kubernetes/audit.log
+          audit-log-maxage: "30"
+          audit-log-maxbackup: "10"
+          audit-log-maxsize: "100"
+      controllerManager:
+        extraArgs:
+          bind-address: "0.0.0.0"
+      scheduler:
+        extraArgs:
+          bind-address: "0.0.0.0"
+      etcd:
+        local:
+          extraArgs:
+            listen-metrics-urls: http://0.0.0.0:2381
+      networking:
+        podSubnet: 10.244.0.0/16
+        serviceSubnet: 10.96.0.0/12
+    files:
+      - path: /etc/containerd/config.toml
+        owner: root:root
+        permissions: "0644"
+        contentFrom:
+          secret:
+            name: ai-cluster-containerd
+            key: config.toml
+    preKubeadmCommands:
+      - systemctl daemon-reload
+      - systemctl restart containerd
+      - modprobe br_netfilter || true
+      - sysctl -w net.ipv4.ip_forward=1
+    postKubeadmCommands:
+      - mkdir -p /home/ops/.kube
+      - cp /etc/kubernetes/admin.conf /home/ops/.kube/config || true
+      - chown -R ops:ops /home/ops/.kube || true
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: Metal3MachineTemplate
+metadata:
+  name: ai-cluster-cp
+  namespace: metal3
+spec:
+  template:
+    spec:
+      dataTemplate:
+        name: ai-cluster-cp-metadata
+      image:
+        checksum: ""
+        checksumType: sha256
+        format: qcow2
+        url: http://10.10.0.10:8080/images/ubuntu-24.04-server-cloudimg-amd64.img
+      automatedCleaningMode: metadata
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: Metal3DataTemplate
+metadata:
+  name: ai-cluster-cp-metadata
+  namespace: metal3
+spec:
+  clusterName: ai-cluster
+  metaData:
+    objectNames:
+      - key: name
+        object: machine
+      - key: local-hostname
+        object: machine
+      - key: local_hostname
+        object: machine
+  networkData:
+    links:
+      ethernets:
+        - type: phy
+          idFromMACAnnotation: metal3.io/mac-address
+          mtu: 1500
+    networks:
+      ipv4:
+        - id: mgmt
+          ipAddressFromIPPool: mgmt-pool
+          link: eth0
+          routes:
+            - network: 0.0.0.0
+              prefix: 0
+              gateway:
+                fromIPPool: mgmt-pool
+    services:
+      dns:
+        - 10.10.0.10

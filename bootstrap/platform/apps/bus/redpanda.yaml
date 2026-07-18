@@ -1,0 +1,71 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: redpanda
+  namespace: redpanda
+spec:
+  interval: 1h
+  url: https://charts.redpanda.com
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: redpanda
+  namespace: redpanda
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: redpanda
+      version: 5.9.21
+      sourceRef:
+        kind: HelmRepository
+        name: redpanda
+  values:
+    statefulset:
+      replicas: 3
+    resources:
+      cpu:
+        cores: 2
+      memory:
+        container:
+          max: 8Gi
+    storage:
+      persistentVolume:
+        enabled: true
+        size: 500Gi
+        storageClass: local-path
+    tuning:
+      tune_aio_events: true
+    listeners:
+      kafka:
+        port: 9093
+      admin:
+        port: 9644
+    monitoring:
+      enabled: true
+      scrapeInterval: 15s
+    # Topic for 1-year inference archive pipeline (SPEC §6.7)
+    console:
+      enabled: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inference-topics
+  namespace: redpanda
+data:
+  bootstrap.yaml: |
+    topics:
+      - name: inference.records
+        partitions: 24
+        replication_factor: 3
+        config:
+          retention.ms: 604800000   # 7d bus buffer before object lake compact
+          compression.type: zstd
+      - name: inference.dlq
+        partitions: 6
+        replication_factor: 3
+      - name: inference.tombstones
+        partitions: 6
+        replication_factor: 3

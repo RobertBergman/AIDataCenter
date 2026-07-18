@@ -1,0 +1,61 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: nvidia
+  namespace: network-operator
+spec:
+  interval: 1h
+  url: https://helm.ngc.nvidia.com/nvidia
+---
+# NVIDIA Network Operator — RDMA, SR-IOV, secondary networks for 8×400G rail NICs
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: network-operator
+  namespace: network-operator
+spec:
+  interval: 30m
+  timeout: 20m
+  chart:
+    spec:
+      chart: network-operator
+      version: v25.1.0
+      sourceRef:
+        kind: HelmRepository
+        name: nvidia
+  values:
+    nfd:
+      enabled: false
+    sriovNetworkOperator:
+      enabled: true
+    ofedDriver:
+      deploy: true
+    rdmaSharedDevicePlugin:
+      deploy: true
+      resources:
+        - name: rdma_shared_device_a
+          vendors: ["15b3"]
+          devices: ["1021", "a2dc"]
+          rdmaHcaMax: 63
+    secondaryNetwork:
+      deploy: true
+      multus:
+        deploy: true
+      cniPlugins:
+        deploy: true
+      ipoib:
+        deploy: false
+# After install, apply SriovNetworkNodePolicy per rail NIC — see docs/network.md
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: roce-rail-policy-notes
+  namespace: network-operator
+data:
+  README: |
+    Per GPU rail: create SriovNetworkNodePolicy mapping mlx5_N to resource nvidia.com/railN
+    PFC/ECN stay on Arista EOS (not host). Host needs:
+      - MTU 9000 on data NICs (optional, fabric-consistent)
+      - trust dscp on ToR (EOS)
+      - NCCL_IB_HCA / NCCL_SOCKET_IFNAME set in InferenceService env

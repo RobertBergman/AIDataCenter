@@ -1,0 +1,90 @@
+# Day-0 NetBox on seed01 (SoT before the cluster exists).
+# Production HA NetBox is platform/apps/netbox via Flux.
+
+services:
+  postgres:
+    image: docker.io/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-netboxchangeme}
+    volumes:
+      - netbox-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redischangeme}
+    volumes:
+      - netbox-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redischangeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  netbox:
+    image: docker.io/netboxcommunity/netbox:v4.2.6
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-netboxchangeme}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redischangeme}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      SUPERUSER_NAME: ${SUPERUSER_NAME:-admin}
+      SUPERUSER_EMAIL: ${SUPERUSER_EMAIL:-netbox@ai.local}
+      SUPERUSER_PASSWORD: ${SUPERUSER_PASSWORD:-adminchangeme}
+      ALLOWED_HOSTS: "*"
+    ports:
+      - "8081:8080"
+    volumes:
+      - netbox-media:/opt/netbox/netbox/media
+      - netbox-reports:/etc/netbox/reports
+      - netbox-scripts:/etc/netbox/scripts
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/login/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  netbox-worker:
+    image: docker.io/netboxcommunity/netbox:v4.2.6
+    restart: unless-stopped
+    depends_on:
+      - netbox
+    command: /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-netboxchangeme}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redischangeme}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      ALLOWED_HOSTS: "*"
+
+volumes:
+  netbox-postgres:
+  netbox-redis:
+  netbox-media:
+  netbox-reports:
+  netbox-scripts:

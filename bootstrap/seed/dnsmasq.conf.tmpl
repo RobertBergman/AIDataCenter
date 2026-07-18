@@ -1,0 +1,39 @@
+# dnsmasq on seed01 — DHCP + DNS for mgmt plane + iPXE chain.
+# scripts/00-seed-host.sh appends static leases and host records.
+
+port=53
+domain-needed
+bogus-priv
+no-resolv
+server=1.1.1.1
+server=8.8.8.8
+
+domain={{ domain }}
+local=/{{ domain }}/
+expand-hosts
+
+interface=eth0
+bind-interfaces
+listen-address={{ seed_ip }}
+listen-address=127.0.0.1
+
+dhcp-range={{ dhcp_start }},{{ dhcp_end }},12h
+dhcp-option=option:router,{{ gateway }}
+dhcp-option=option:dns-server,{{ seed_ip }}
+dhcp-option=option:ntp-server,{{ seed_ip }}
+dhcp-option=option:domain-name,{{ domain }}
+
+dhcp-match=set:efi64,option:client-arch,7
+dhcp-match=set:efi64,option:client-arch,9
+dhcp-match=set:efi64,option:client-arch,11
+dhcp-boot=tag:!ipxe,tag:efi64,ipxe.efi
+dhcp-boot=tag:ipxe,http://{{ seed_ip }}/boot.ipxe
+dhcp-userclass=set:ipxe,iPXE
+
+address=/seed01.{{ domain }}/{{ seed_ip }}
+address=/api.{{ domain }}/{{ cp_vip }}
+address=/registry.{{ domain }}/{{ harbor_ip }}
+address=/vault.{{ domain }}/{{ vault_ip }}
+
+log-queries
+log-dhcp

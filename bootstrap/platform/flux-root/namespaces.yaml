@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-operator
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: network-operator
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kserve
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: harbor
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redpanda
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inference
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netbox

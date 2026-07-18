@@ -1,0 +1,37 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy
+  namespace: observability
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: alloy
+      version: 0.12.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: observability
+  values:
+    alloy:
+      configMap:
+        content: |-
+          logging {
+            level  = "info"
+            format = "logfmt"
+          }
+          discovery.kubernetes "pods" {
+            role = "pod"
+          }
+          loki.source.kubernetes "pods" {
+            targets    = discovery.kubernetes.pods.targets
+            forward_to = [loki.write.default.receiver]
+          }
+          loki.write "default" {
+            endpoint {
+              url = "http://loki-gateway.observability.svc/loki/api/v1/push"
+            }
+          }
+    controller:
+      type: daemonset

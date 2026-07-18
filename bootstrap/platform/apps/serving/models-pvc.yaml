@@ -1,0 +1,39 @@
+# Hot model FS PVC (SPEC §6.6). Bind when STOR CSI is registered.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-rwx
+  namespace: inference
+  annotations:
+    # volume.kubernetes.io/storage-provisioner: example.com/weka-csi
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: models-rwx
+  resources:
+    requests:
+      storage: 200Ti
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: models-rwx
+  annotations:
+    description: Hot model parallel FS / NFS appliance (Weka/BeeGFS/FlashBlade)
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+# Replace with real CSI provisioner when STOR path is ready.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inference-archive-scratch
+  namespace: inference
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Ti

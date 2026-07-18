@@ -1,0 +1,32 @@
+# Knative Serving — required by classic KServe raw/serverless modes
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: knative-serving
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: knative-serving
+  namespace: kserve
+spec:
+  interval: 1h
+  url: oci://gcr.io/knative-releases/knative.dev/serving/config
+  ref:
+    tag: v1.16.0
+---
+# For air-gap, vendor Knative YAML under platform/apps/serving/vendor/
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: knative-serving
+  namespace: flux-system
+spec:
+  interval: 30m
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: ai-cluster
+  path: ./bootstrap/platform/apps/serving/knative-overlay
+  wait: true
+  timeout: 15m

@@ -1,0 +1,143 @@
+label,class,a_device,a_iface,b_device,b_iface,type,status,description
+R0-W01,fabric-host-leaf,worker01,rail0,leaf-rail0,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 0: worker01 → leaf-rail0
+R1-W01,fabric-host-leaf,worker01,rail1,leaf-rail1,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 1: worker01 → leaf-rail1
+R2-W01,fabric-host-leaf,worker01,rail2,leaf-rail2,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 2: worker01 → leaf-rail2
+R3-W01,fabric-host-leaf,worker01,rail3,leaf-rail3,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 3: worker01 → leaf-rail3
+R4-W01,fabric-host-leaf,worker01,rail4,leaf-rail4,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 4: worker01 → leaf-rail4
+R5-W01,fabric-host-leaf,worker01,rail5,leaf-rail5,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 5: worker01 → leaf-rail5
+R6-W01,fabric-host-leaf,worker01,rail6,leaf-rail6,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 6: worker01 → leaf-rail6
+R7-W01,fabric-host-leaf,worker01,rail7,leaf-rail7,Ethernet1,dac-qsfpdd-400g,planned,GPU rail 7: worker01 → leaf-rail7
+R0-W02,fabric-host-leaf,worker02,rail0,leaf-rail0,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 0: worker02 → leaf-rail0
+R1-W02,fabric-host-leaf,worker02,rail1,leaf-rail1,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 1: worker02 → leaf-rail1
+R2-W02,fabric-host-leaf,worker02,rail2,leaf-rail2,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 2: worker02 → leaf-rail2
+R3-W02,fabric-host-leaf,worker02,rail3,leaf-rail3,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 3: worker02 → leaf-rail3
+R4-W02,fabric-host-leaf,worker02,rail4,leaf-rail4,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 4: worker02 → leaf-rail4
+R5-W02,fabric-host-leaf,worker02,rail5,leaf-rail5,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 5: worker02 → leaf-rail5
+R6-W02,fabric-host-leaf,worker02,rail6,leaf-rail6,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 6: worker02 → leaf-rail6
+R7-W02,fabric-host-leaf,worker02,rail7,leaf-rail7,Ethernet2,dac-qsfpdd-400g,planned,GPU rail 7: worker02 → leaf-rail7
+R0-W03,fabric-host-leaf,worker03,rail0,leaf-rail0,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 0: worker03 → leaf-rail0
+R1-W03,fabric-host-leaf,worker03,rail1,leaf-rail1,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 1: worker03 → leaf-rail1
+R2-W03,fabric-host-leaf,worker03,rail2,leaf-rail2,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 2: worker03 → leaf-rail2
+R3-W03,fabric-host-leaf,worker03,rail3,leaf-rail3,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 3: worker03 → leaf-rail3
+R4-W03,fabric-host-leaf,worker03,rail4,leaf-rail4,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 4: worker03 → leaf-rail4
+R5-W03,fabric-host-leaf,worker03,rail5,leaf-rail5,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 5: worker03 → leaf-rail5
+R6-W03,fabric-host-leaf,worker03,rail6,leaf-rail6,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 6: worker03 → leaf-rail6
+R7-W03,fabric-host-leaf,worker03,rail7,leaf-rail7,Ethernet3,dac-qsfpdd-400g,planned,GPU rail 7: worker03 → leaf-rail7
+R0-W04,fabric-host-leaf,worker04,rail0,leaf-rail0,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 0: worker04 → leaf-rail0
+R1-W04,fabric-host-leaf,worker04,rail1,leaf-rail1,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 1: worker04 → leaf-rail1
+R2-W04,fabric-host-leaf,worker04,rail2,leaf-rail2,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 2: worker04 → leaf-rail2
+R3-W04,fabric-host-leaf,worker04,rail3,leaf-rail3,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 3: worker04 → leaf-rail3
+R4-W04,fabric-host-leaf,worker04,rail4,leaf-rail4,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 4: worker04 → leaf-rail4
+R5-W04,fabric-host-leaf,worker04,rail5,leaf-rail5,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 5: worker04 → leaf-rail5
+R6-W04,fabric-host-leaf,worker04,rail6,leaf-rail6,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 6: worker04 → leaf-rail6
+R7-W04,fabric-host-leaf,worker04,rail7,leaf-rail7,Ethernet4,dac-qsfpdd-400g,planned,GPU rail 7: worker04 → leaf-rail7
+R0-W05,fabric-host-leaf,worker05,rail0,leaf-rail0,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 0: worker05 → leaf-rail0
+R1-W05,fabric-host-leaf,worker05,rail1,leaf-rail1,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 1: worker05 → leaf-rail1
+R2-W05,fabric-host-leaf,worker05,rail2,leaf-rail2,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 2: worker05 → leaf-rail2
+R3-W05,fabric-host-leaf,worker05,rail3,leaf-rail3,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 3: worker05 → leaf-rail3
+R4-W05,fabric-host-leaf,worker05,rail4,leaf-rail4,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 4: worker05 → leaf-rail4
+R5-W05,fabric-host-leaf,worker05,rail5,leaf-rail5,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 5: worker05 → leaf-rail5
+R6-W05,fabric-host-leaf,worker05,rail6,leaf-rail6,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 6: worker05 → leaf-rail6
+R7-W05,fabric-host-leaf,worker05,rail7,leaf-rail7,Ethernet5,dac-qsfpdd-400g,planned,GPU rail 7: worker05 → leaf-rail7
+R0-W06,fabric-host-leaf,worker06,rail0,leaf-rail0,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 0: worker06 → leaf-rail0
+R1-W06,fabric-host-leaf,worker06,rail1,leaf-rail1,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 1: worker06 → leaf-rail1
+R2-W06,fabric-host-leaf,worker06,rail2,leaf-rail2,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 2: worker06 → leaf-rail2
+R3-W06,fabric-host-leaf,worker06,rail3,leaf-rail3,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 3: worker06 → leaf-rail3
+R4-W06,fabric-host-leaf,worker06,rail4,leaf-rail4,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 4: worker06 → leaf-rail4
+R5-W06,fabric-host-leaf,worker06,rail5,leaf-rail5,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 5: worker06 → leaf-rail5
+R6-W06,fabric-host-leaf,worker06,rail6,leaf-rail6,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 6: worker06 → leaf-rail6
+R7-W06,fabric-host-leaf,worker06,rail7,leaf-rail7,Ethernet6,dac-qsfpdd-400g,planned,GPU rail 7: worker06 → leaf-rail7
+R0-W07,fabric-host-leaf,worker07,rail0,leaf-rail0,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 0: worker07 → leaf-rail0
+R1-W07,fabric-host-leaf,worker07,rail1,leaf-rail1,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 1: worker07 → leaf-rail1
+R2-W07,fabric-host-leaf,worker07,rail2,leaf-rail2,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 2: worker07 → leaf-rail2
+R3-W07,fabric-host-leaf,worker07,rail3,leaf-rail3,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 3: worker07 → leaf-rail3
+R4-W07,fabric-host-leaf,worker07,rail4,leaf-rail4,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 4: worker07 → leaf-rail4
+R5-W07,fabric-host-leaf,worker07,rail5,leaf-rail5,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 5: worker07 → leaf-rail5
+R6-W07,fabric-host-leaf,worker07,rail6,leaf-rail6,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 6: worker07 → leaf-rail6
+R7-W07,fabric-host-leaf,worker07,rail7,leaf-rail7,Ethernet7,dac-qsfpdd-400g,planned,GPU rail 7: worker07 → leaf-rail7
+R0-W08,fabric-host-leaf,worker08,rail0,leaf-rail0,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 0: worker08 → leaf-rail0
+R1-W08,fabric-host-leaf,worker08,rail1,leaf-rail1,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 1: worker08 → leaf-rail1
+R2-W08,fabric-host-leaf,worker08,rail2,leaf-rail2,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 2: worker08 → leaf-rail2
+R3-W08,fabric-host-leaf,worker08,rail3,leaf-rail3,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 3: worker08 → leaf-rail3
+R4-W08,fabric-host-leaf,worker08,rail4,leaf-rail4,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 4: worker08 → leaf-rail4
+R5-W08,fabric-host-leaf,worker08,rail5,leaf-rail5,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 5: worker08 → leaf-rail5
+R6-W08,fabric-host-leaf,worker08,rail6,leaf-rail6,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 6: worker08 → leaf-rail6
+R7-W08,fabric-host-leaf,worker08,rail7,leaf-rail7,Ethernet8,dac-qsfpdd-400g,planned,GPU rail 7: worker08 → leaf-rail7
+L0S1-U1,fabric-leaf-spine,leaf-rail0,Ethernet17,spine1,Ethernet1,aoc-qsfpdd-400g,planned,leaf-spine rail0 u1
+L0S2-U2,fabric-leaf-spine,leaf-rail0,Ethernet18,spine2,Ethernet1,aoc-qsfpdd-400g,planned,leaf-spine rail0 u2
+L0S1-U3,fabric-leaf-spine,leaf-rail0,Ethernet19,spine1,Ethernet2,aoc-qsfpdd-400g,planned,leaf-spine rail0 u3
+L0S2-U4,fabric-leaf-spine,leaf-rail0,Ethernet20,spine2,Ethernet2,aoc-qsfpdd-400g,planned,leaf-spine rail0 u4
+L0S1-U5,fabric-leaf-spine,leaf-rail0,Ethernet21,spine1,Ethernet3,aoc-qsfpdd-400g,planned,leaf-spine rail0 u5
+L0S2-U6,fabric-leaf-spine,leaf-rail0,Ethernet22,spine2,Ethernet3,aoc-qsfpdd-400g,planned,leaf-spine rail0 u6
+L0S1-U7,fabric-leaf-spine,leaf-rail0,Ethernet23,spine1,Ethernet4,aoc-qsfpdd-400g,planned,leaf-spine rail0 u7
+L0S2-U8,fabric-leaf-spine,leaf-rail0,Ethernet24,spine2,Ethernet4,aoc-qsfpdd-400g,planned,leaf-spine rail0 u8
+L1S1-U1,fabric-leaf-spine,leaf-rail1,Ethernet17,spine1,Ethernet5,aoc-qsfpdd-400g,planned,leaf-spine rail1 u1
+L1S2-U2,fabric-leaf-spine,leaf-rail1,Ethernet18,spine2,Ethernet5,aoc-qsfpdd-400g,planned,leaf-spine rail1 u2
+L1S1-U3,fabric-leaf-spine,leaf-rail1,Ethernet19,spine1,Ethernet6,aoc-qsfpdd-400g,planned,leaf-spine rail1 u3
+L1S2-U4,fabric-leaf-spine,leaf-rail1,Ethernet20,spine2,Ethernet6,aoc-qsfpdd-400g,planned,leaf-spine rail1 u4
+L1S1-U5,fabric-leaf-spine,leaf-rail1,Ethernet21,spine1,Ethernet7,aoc-qsfpdd-400g,planned,leaf-spine rail1 u5
+L1S2-U6,fabric-leaf-spine,leaf-rail1,Ethernet22,spine2,Ethernet7,aoc-qsfpdd-400g,planned,leaf-spine rail1 u6
+L1S1-U7,fabric-leaf-spine,leaf-rail1,Ethernet23,spine1,Ethernet8,aoc-qsfpdd-400g,planned,leaf-spine rail1 u7
+L1S2-U8,fabric-leaf-spine,leaf-rail1,Ethernet24,spine2,Ethernet8,aoc-qsfpdd-400g,planned,leaf-spine rail1 u8
+L2S1-U1,fabric-leaf-spine,leaf-rail2,Ethernet17,spine1,Ethernet9,aoc-qsfpdd-400g,planned,leaf-spine rail2 u1
+L2S2-U2,fabric-leaf-spine,leaf-rail2,Ethernet18,spine2,Ethernet9,aoc-qsfpdd-400g,planned,leaf-spine rail2 u2
+L2S1-U3,fabric-leaf-spine,leaf-rail2,Ethernet19,spine1,Ethernet10,aoc-qsfpdd-400g,planned,leaf-spine rail2 u3
+L2S2-U4,fabric-leaf-spine,leaf-rail2,Ethernet20,spine2,Ethernet10,aoc-qsfpdd-400g,planned,leaf-spine rail2 u4
+L2S1-U5,fabric-leaf-spine,leaf-rail2,Ethernet21,spine1,Ethernet11,aoc-qsfpdd-400g,planned,leaf-spine rail2 u5
+L2S2-U6,fabric-leaf-spine,leaf-rail2,Ethernet22,spine2,Ethernet11,aoc-qsfpdd-400g,planned,leaf-spine rail2 u6
+L2S1-U7,fabric-leaf-spine,leaf-rail2,Ethernet23,spine1,Ethernet12,aoc-qsfpdd-400g,planned,leaf-spine rail2 u7
+L2S2-U8,fabric-leaf-spine,leaf-rail2,Ethernet24,spine2,Ethernet12,aoc-qsfpdd-400g,planned,leaf-spine rail2 u8
+L3S1-U1,fabric-leaf-spine,leaf-rail3,Ethernet17,spine1,Ethernet13,aoc-qsfpdd-400g,planned,leaf-spine rail3 u1
+L3S2-U2,fabric-leaf-spine,leaf-rail3,Ethernet18,spine2,Ethernet13,aoc-qsfpdd-400g,planned,leaf-spine rail3 u2
+L3S1-U3,fabric-leaf-spine,leaf-rail3,Ethernet19,spine1,Ethernet14,aoc-qsfpdd-400g,planned,leaf-spine rail3 u3
+L3S2-U4,fabric-leaf-spine,leaf-rail3,Ethernet20,spine2,Ethernet14,aoc-qsfpdd-400g,planned,leaf-spine rail3 u4
+L3S1-U5,fabric-leaf-spine,leaf-rail3,Ethernet21,spine1,Ethernet15,aoc-qsfpdd-400g,planned,leaf-spine rail3 u5
+L3S2-U6,fabric-leaf-spine,leaf-rail3,Ethernet22,spine2,Ethernet15,aoc-qsfpdd-400g,planned,leaf-spine rail3 u6
+L3S1-U7,fabric-leaf-spine,leaf-rail3,Ethernet23,spine1,Ethernet16,aoc-qsfpdd-400g,planned,leaf-spine rail3 u7
+L3S2-U8,fabric-leaf-spine,leaf-rail3,Ethernet24,spine2,Ethernet16,aoc-qsfpdd-400g,planned,leaf-spine rail3 u8
+L4S1-U1,fabric-leaf-spine,leaf-rail4,Ethernet17,spine1,Ethernet17,aoc-qsfpdd-400g,planned,leaf-spine rail4 u1
+L4S2-U2,fabric-leaf-spine,leaf-rail4,Ethernet18,spine2,Ethernet17,aoc-qsfpdd-400g,planned,leaf-spine rail4 u2
+L4S1-U3,fabric-leaf-spine,leaf-rail4,Ethernet19,spine1,Ethernet18,aoc-qsfpdd-400g,planned,leaf-spine rail4 u3
+L4S2-U4,fabric-leaf-spine,leaf-rail4,Ethernet20,spine2,Ethernet18,aoc-qsfpdd-400g,planned,leaf-spine rail4 u4
+L4S1-U5,fabric-leaf-spine,leaf-rail4,Ethernet21,spine1,Ethernet19,aoc-qsfpdd-400g,planned,leaf-spine rail4 u5
+L4S2-U6,fabric-leaf-spine,leaf-rail4,Ethernet22,spine2,Ethernet19,aoc-qsfpdd-400g,planned,leaf-spine rail4 u6
+L4S1-U7,fabric-leaf-spine,leaf-rail4,Ethernet23,spine1,Ethernet20,aoc-qsfpdd-400g,planned,leaf-spine rail4 u7
+L4S2-U8,fabric-leaf-spine,leaf-rail4,Ethernet24,spine2,Ethernet20,aoc-qsfpdd-400g,planned,leaf-spine rail4 u8
+L5S1-U1,fabric-leaf-spine,leaf-rail5,Ethernet17,spine1,Ethernet21,aoc-qsfpdd-400g,planned,leaf-spine rail5 u1
+L5S2-U2,fabric-leaf-spine,leaf-rail5,Ethernet18,spine2,Ethernet21,aoc-qsfpdd-400g,planned,leaf-spine rail5 u2
+L5S1-U3,fabric-leaf-spine,leaf-rail5,Ethernet19,spine1,Ethernet22,aoc-qsfpdd-400g,planned,leaf-spine rail5 u3
+L5S2-U4,fabric-leaf-spine,leaf-rail5,Ethernet20,spine2,Ethernet22,aoc-qsfpdd-400g,planned,leaf-spine rail5 u4
+L5S1-U5,fabric-leaf-spine,leaf-rail5,Ethernet21,spine1,Ethernet23,aoc-qsfpdd-400g,planned,leaf-spine rail5 u5
+L5S2-U6,fabric-leaf-spine,leaf-rail5,Ethernet22,spine2,Ethernet23,aoc-qsfpdd-400g,planned,leaf-spine rail5 u6
+L5S1-U7,fabric-leaf-spine,leaf-rail5,Ethernet23,spine1,Ethernet24,aoc-qsfpdd-400g,planned,leaf-spine rail5 u7
+L5S2-U8,fabric-leaf-spine,leaf-rail5,Ethernet24,spine2,Ethernet24,aoc-qsfpdd-400g,planned,leaf-spine rail5 u8
+L6S1-U1,fabric-leaf-spine,leaf-rail6,Ethernet17,spine1,Ethernet25,aoc-qsfpdd-400g,planned,leaf-spine rail6 u1
+L6S2-U2,fabric-leaf-spine,leaf-rail6,Ethernet18,spine2,Ethernet25,aoc-qsfpdd-400g,planned,leaf-spine rail6 u2
+L6S1-U3,fabric-leaf-spine,leaf-rail6,Ethernet19,spine1,Ethernet26,aoc-qsfpdd-400g,planned,leaf-spine rail6 u3
+L6S2-U4,fabric-leaf-spine,leaf-rail6,Ethernet20,spine2,Ethernet26,aoc-qsfpdd-400g,planned,leaf-spine rail6 u4
+L6S1-U5,fabric-leaf-spine,leaf-rail6,Ethernet21,spine1,Ethernet27,aoc-qsfpdd-400g,planned,leaf-spine rail6 u5
+L6S2-U6,fabric-leaf-spine,leaf-rail6,Ethernet22,spine2,Ethernet27,aoc-qsfpdd-400g,planned,leaf-spine rail6 u6
+L6S1-U7,fabric-leaf-spine,leaf-rail6,Ethernet23,spine1,Ethernet28,aoc-qsfpdd-400g,planned,leaf-spine rail6 u7
+L6S2-U8,fabric-leaf-spine,leaf-rail6,Ethernet24,spine2,Ethernet28,aoc-qsfpdd-400g,planned,leaf-spine rail6 u8
+L7S1-U1,fabric-leaf-spine,leaf-rail7,Ethernet17,spine1,Ethernet29,aoc-qsfpdd-400g,planned,leaf-spine rail7 u1
+L7S2-U2,fabric-leaf-spine,leaf-rail7,Ethernet18,spine2,Ethernet29,aoc-qsfpdd-400g,planned,leaf-spine rail7 u2
+L7S1-U3,fabric-leaf-spine,leaf-rail7,Ethernet19,spine1,Ethernet30,aoc-qsfpdd-400g,planned,leaf-spine rail7 u3
+L7S2-U4,fabric-leaf-spine,leaf-rail7,Ethernet20,spine2,Ethernet30,aoc-qsfpdd-400g,planned,leaf-spine rail7 u4
+L7S1-U5,fabric-leaf-spine,leaf-rail7,Ethernet21,spine1,Ethernet31,aoc-qsfpdd-400g,planned,leaf-spine rail7 u5
+L7S2-U6,fabric-leaf-spine,leaf-rail7,Ethernet22,spine2,Ethernet31,aoc-qsfpdd-400g,planned,leaf-spine rail7 u6
+L7S1-U7,fabric-leaf-spine,leaf-rail7,Ethernet23,spine1,Ethernet32,aoc-qsfpdd-400g,planned,leaf-spine rail7 u7
+L7S2-U8,fabric-leaf-spine,leaf-rail7,Ethernet24,spine2,Ethernet32,aoc-qsfpdd-400g,planned,leaf-spine rail7 u8
+OOB-cp01,oob-bmc,cp01,bmc,oob-sw1,Ethernet1,cat6,planned,BMC cp01 → oob-sw1
+OOB-cp02,oob-bmc,cp02,bmc,oob-sw1,Ethernet2,cat6,planned,BMC cp02 → oob-sw1
+OOB-cp03,oob-bmc,cp03,bmc,oob-sw1,Ethernet3,cat6,planned,BMC cp03 → oob-sw1
+OOB-util01,oob-bmc,util01,bmc,oob-sw1,Ethernet4,cat6,planned,BMC util01 → oob-sw1
+OOB-util02,oob-bmc,util02,bmc,oob-sw1,Ethernet5,cat6,planned,BMC util02 → oob-sw1
+OOB-util03,oob-bmc,util03,bmc,oob-sw1,Ethernet6,cat6,planned,BMC util03 → oob-sw1
+OOB-worker01,oob-bmc,worker01,bmc,oob-sw1,Ethernet7,cat6,planned,BMC worker01 → oob-sw1
+OOB-worker02,oob-bmc,worker02,bmc,oob-sw1,Ethernet8,cat6,planned,BMC worker02 → oob-sw1
+OOB-worker03,oob-bmc,worker03,bmc,oob-sw1,Ethernet9,cat6,planned,BMC worker03 → oob-sw1
+OOB-worker04,oob-bmc,worker04,bmc,oob-sw1,Ethernet10,cat6,planned,BMC worker04 → oob-sw1
+OOB-worker05,oob-bmc,worker05,bmc,oob-sw2,Ethernet1,cat6,planned,BMC worker05 → oob-sw2
+OOB-worker06,oob-bmc,worker06,bmc,oob-sw2,Ethernet2,cat6,planned,BMC worker06 → oob-sw2
+OOB-worker07,oob-bmc,worker07,bmc,oob-sw2,Ethernet3,cat6,planned,BMC worker07 → oob-sw2
+OOB-worker08,oob-bmc,worker08,bmc,oob-sw2,Ethernet4,cat6,planned,BMC worker08 → oob-sw2

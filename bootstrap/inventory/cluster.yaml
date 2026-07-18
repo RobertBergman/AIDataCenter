@@ -1,0 +1,123 @@
+# GENERATED FILE — do not hand-edit.
+# Source of truth: NetBox (seed/site.yaml (offline))
+# Generated: 2026-07-18T19:10:26Z
+# Regenerate: python3 bootstrap/netbox/scripts/export_inventory.py
+cluster:
+  name: ai-cluster
+  domain: ai.local
+  site: lab
+network:
+  mgmt:
+    cidr: 10.10.0.0/24
+    gateway: 10.10.0.1
+    vlan: 10
+    dns:
+    - 10.10.0.10
+    ntp:
+    - 10.10.0.10
+  k8s_service_cidr: 10.96.0.0/12
+  k8s_pod_cidr: 10.244.0.0/16
+  oob:
+    cidr: 10.20.0.0/24
+    gateway: 10.20.0.1
+  fabric:
+    platform: Arista 7060DX5
+    rails: 8
+    host_nics_per_gpu_server: 8
+seed:
+  hostname: seed01
+  role: bootstrap
+  ip: 10.10.0.10
+  peer_ip: null
+control_plane:
+  count: 3
+  vip: 10.10.0.20
+  nodes:
+  - name: cp01
+    ip: 10.10.0.21
+    bmc: 10.20.0.21
+    mac_mgmt: 00:00:00:00:00:21
+    rack: BOOT
+  - name: cp02
+    ip: 10.10.0.22
+    bmc: 10.20.0.22
+    mac_mgmt: 00:00:00:00:00:22
+    rack: BOOT
+  - name: cp03
+    ip: 10.10.0.23
+    bmc: 10.20.0.23
+    mac_mgmt: 00:00:00:00:00:23
+    rack: BOOT
+utility:
+  nodes:
+  - name: util01
+    ip: 10.10.0.31
+    bmc: 10.20.0.31
+    mac_mgmt: 00:00:00:00:00:31
+    rack: BOOT
+  - name: util02
+    ip: 10.10.0.32
+    bmc: 10.20.0.32
+    mac_mgmt: 00:00:00:00:00:32
+    rack: BOOT
+  - name: util03
+    ip: 10.10.0.33
+    bmc: 10.20.0.33
+    mac_mgmt: 00:00:00:00:00:33
+    rack: BOOT
+gpu_workers:
+  count: 8
+  gpus_per_node: 8
+  nodes:
+  - name: worker01
+    ip: 10.10.0.101
+    bmc: 10.20.0.101
+    mac_mgmt: 00:00:00:00:01:01
+    rack: GPU-1
+  - name: worker02
+    ip: 10.10.0.102
+    bmc: 10.20.0.102
+    mac_mgmt: 00:00:00:00:02:01
+    rack: GPU-1
+  - name: worker03
+    ip: 10.10.0.103
+    bmc: 10.20.0.103
+    mac_mgmt: 00:00:00:00:03:01
+    rack: GPU-1
+  - name: worker04
+    ip: 10.10.0.104
+    bmc: 10.20.0.104
+    mac_mgmt: 00:00:00:00:04:01
+    rack: GPU-1
+  - name: worker05
+    ip: 10.10.0.105
+    bmc: 10.20.0.105
+    mac_mgmt: 00:00:00:00:05:01
+    rack: GPU-2
+  - name: worker06
+    ip: 10.10.0.106
+    bmc: 10.20.0.106
+    mac_mgmt: 00:00:00:00:06:01
+    rack: GPU-2
+  - name: worker07
+    ip: 10.10.0.107
+    bmc: 10.20.0.107
+    mac_mgmt: 00:00:00:00:07:01
+    rack: GPU-2
+  - name: worker08
+    ip: 10.10.0.108
+    bmc: 10.20.0.108
+    mac_mgmt: 00:00:00:00:08:01
+    rack: GPU-2
+bmc:
+  username_env: BMC_USERNAME
+  password_env: BMC_PASSWORD
+  protocol: redfish
+images:
+  base_os: ubuntu-24.04-server-cloudimg-amd64.img
+  ironic_kernel: ironic-python-agent.kernel
+  ironic_ramdisk: ironic-python-agent.initramfs
+  k8s_version: v1.32.2
+source_of_truth:
+  system: netbox
+  export: bootstrap/netbox/scripts/export_inventory.py

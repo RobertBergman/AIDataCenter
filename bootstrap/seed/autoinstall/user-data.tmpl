@@ -1,0 +1,61 @@
+#cloud-config
+autoinstall:
+  version: 1
+  identity:
+    hostname: {{ hostname }}
+    username: ops
+    # Generate: openssl passwd -6 -salt xyz 'changeme'
+    password: "{{ hashed_password }}"
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - "{{ ssh_pubkey }}"
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  network:
+    network:
+      version: 2
+      ethernets:
+        mgmt0:
+          match:
+            macaddress: "{{ mac_mgmt }}"
+          set-name: mgmt0
+          addresses:
+            - "{{ ip }}/24"
+          routes:
+            - to: default
+              via: "{{ gateway }}"
+          nameservers:
+            addresses: ["{{ seed_ip }}"]
+            search: ["{{ domain }}"]
+  storage:
+    layout:
+      name: lvm
+      match:
+        size: largest
+  packages:
+    - qemu-guest-agent
+    - open-iscsi
+    - nfs-common
+    - linux-modules-extra-$(uname -r)
+    - chrony
+    - curl
+    - jq
+  user-data:
+    disable_root: false
+    package_update: true
+    package_upgrade: true
+    timezone: UTC
+    write_files:
+      - path: /etc/chrony/chrony.conf
+        content: |
+          server {{ seed_ip }} iburst
+          makestep 1.0 3
+          rtcsync
+    runcmd:
+      - systemctl enable --now chrony
+      - [ bash, -c, "echo '{{ hostname }}' > /etc/hostname && hostnamectl set-hostname {{ hostname }}" ]
+  late-commands:
+    - curtin in-target --target=/target -- systemctl enable ssh

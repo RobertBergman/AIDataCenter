@@ -1,0 +1,111 @@
+# GENERATED from NetBox — do not hand-edit
+generated_at: '2026-07-18T19:10:26.903369+00:00'
+source: seed/site.yaml
+prefixes:
+- prefix: 10.10.0.0/24
+  vlan: mgmt
+  status: active
+  description: Mgmt / bootstrap
+  role: management
+- prefix: 10.20.0.0/24
+  vlan: oob
+  status: active
+  description: OOB BMC
+  role: oob
+- prefix: 10.30.0.0/16
+  vlan: fabric-underlay
+  status: container
+  description: Fabric underlay container
+  role: fabric
+- prefix: 10.40.0.0/16
+  vlan: storage
+  status: active
+  description: Storage data
+  role: storage
+- prefix: 10.96.0.0/12
+  status: container
+  description: Kubernetes services (documented)
+  role: k8s-service
+- prefix: 10.244.0.0/16
+  status: container
+  description: Kubernetes pods (documented)
+  role: k8s-pod
+gateways:
+- address: 10.10.0.1/24
+  dns_name: gw-mgmt.ai.local
+  description: Mgmt gateway
+  role: anycast
+- address: 10.20.0.1/24
+  dns_name: gw-oob.ai.local
+  description: OOB gateway
+  role: anycast
+vips:
+- address: 10.10.0.20/24
+  dns_name: api.ai.local
+  description: K8s API VIP
+  role: vip
+- address: 10.10.0.31/24
+  dns_name: registry.ai.local
+  description: Harbor VIP/primary
+  role: vip
+device_ips:
+- device: seed01
+  mgmt: 10.10.0.10/24
+  bmc: null
+  role: bootstrap
+- device: cp01
+  mgmt: 10.10.0.21/24
+  bmc: 10.20.0.21/24
+  role: control-plane
+- device: cp02
+  mgmt: 10.10.0.22/24
+  bmc: 10.20.0.22/24
+  role: control-plane
+- device: cp03
+  mgmt: 10.10.0.23/24
+  bmc: 10.20.0.23/24
+  role: control-plane
+- device: util01
+  mgmt: 10.10.0.31/24
+  bmc: 10.20.0.31/24
+  role: utility
+- device: util02
+  mgmt: 10.10.0.32/24
+  bmc: 10.20.0.32/24
+  role: utility
+- device: util03
+  mgmt: 10.10.0.33/24
+  bmc: 10.20.0.33/24
+  role: utility
+- device: worker01
+  mgmt: 10.10.0.101/24
+  bmc: 10.20.0.101/24
+  role: gpu-worker
+- device: worker02
+  mgmt: 10.10.0.102/24
+  bmc: 10.20.0.102/24
+  role: gpu-worker
+- device: worker03
+  mgmt: 10.10.0.103/24
+  bmc: 10.20.0.103/24
+  role: gpu-worker
+- device: worker04
+  mgmt: 10.10.0.104/24
+  bmc: 10.20.0.104/24
+  role: gpu-worker
+- device: worker05
+  mgmt: 10.10.0.105/24
+  bmc: 10.20.0.105/24
+  role: gpu-worker
+- device: worker06
+  mgmt: 10.10.0.106/24
+  bmc: 10.20.0.106/24
+  role: gpu-worker
+- device: worker07
+  mgmt: 10.10.0.107/24
+  bmc: 10.20.0.107/24
+  role: gpu-worker
+- device: worker08
+  mgmt: 10.10.0.108/24
+  bmc: 10.20.0.108/24
+  role: gpu-worker

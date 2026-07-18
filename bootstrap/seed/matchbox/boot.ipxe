@@ -1,0 +1,21 @@
+#!ipxe
+# Chain target after UEFI loads iPXE. Matchbox / Ironicschedules by MAC.
+
+set seed {{ seed_ip }}
+set domain {{ domain }}
+
+iseq ${mac}  || goto unknown
+
+# Metal3/Ironic: next-server delivers IPA when node is set to pxe boot via Redfish
+# Prefer group-based matchbox profiles when not under Ironic control.
+chain http://${seed}:8080/ipxe?uuid=${uuid}&mac=${mac:hexhyp} || goto default
+
+:default
+echo No profile for MAC ${mac} — chaining generic Ubuntu autoinstall
+kernel http://${seed}:8080/assets/ubuntu/vmlinuz initrd=initrd autoinstall ds=nocloud-net;s=http://${seed}:8080/autoinstall/${mac:hexhyp}/
+initrd http://${seed}:8080/assets/ubuntu/initrd
+boot
+
+:unknown
+echo Unknown client; dropping to shell
+shell
