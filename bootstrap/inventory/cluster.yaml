@@ -1,6 +1,6 @@
 # GENERATED FILE — do not hand-edit.
 # Source of truth: NetBox (seed/site.yaml (offline))
-# Generated: 2026-07-18T19:10:26Z
+# Generated: 2026-07-20T02:22:39Z
 # Regenerate: python3 bootstrap/netbox/scripts/export_inventory.py
 cluster:
   name: ai-cluster
@@ -37,16 +37,19 @@ control_plane:
     ip: 10.10.0.21
     bmc: 10.20.0.21
     mac_mgmt: 00:00:00:00:00:21
+    mac_bmc: 00:00:00:00:10:21
     rack: BOOT
   - name: cp02
     ip: 10.10.0.22
     bmc: 10.20.0.22
     mac_mgmt: 00:00:00:00:00:22
+    mac_bmc: 00:00:00:00:10:22
     rack: BOOT
   - name: cp03
     ip: 10.10.0.23
     bmc: 10.20.0.23
     mac_mgmt: 00:00:00:00:00:23
+    mac_bmc: 00:00:00:00:10:23
     rack: BOOT
 utility:
   nodes:
@@ -54,16 +57,19 @@ utility:
     ip: 10.10.0.31
     bmc: 10.20.0.31
     mac_mgmt: 00:00:00:00:00:31
+    mac_bmc: 00:00:00:00:10:31
     rack: BOOT
   - name: util02
     ip: 10.10.0.32
     bmc: 10.20.0.32
     mac_mgmt: 00:00:00:00:00:32
+    mac_bmc: 00:00:00:00:10:32
     rack: BOOT
   - name: util03
     ip: 10.10.0.33
     bmc: 10.20.0.33
     mac_mgmt: 00:00:00:00:00:33
+    mac_bmc: 00:00:00:00:10:33
     rack: BOOT
 gpu_workers:
   count: 8
@@ -73,42 +79,112 @@ gpu_workers:
     ip: 10.10.0.101
     bmc: 10.20.0.101
     mac_mgmt: 00:00:00:00:01:01
+    mac_bmc: 00:00:00:00:01:02
     rack: GPU-1
   - name: worker02
     ip: 10.10.0.102
     bmc: 10.20.0.102
     mac_mgmt: 00:00:00:00:02:01
+    mac_bmc: 00:00:00:00:02:02
     rack: GPU-1
   - name: worker03
     ip: 10.10.0.103
     bmc: 10.20.0.103
     mac_mgmt: 00:00:00:00:03:01
+    mac_bmc: 00:00:00:00:03:02
     rack: GPU-1
   - name: worker04
     ip: 10.10.0.104
     bmc: 10.20.0.104
     mac_mgmt: 00:00:00:00:04:01
+    mac_bmc: 00:00:00:00:04:02
     rack: GPU-1
   - name: worker05
     ip: 10.10.0.105
     bmc: 10.20.0.105
     mac_mgmt: 00:00:00:00:05:01
+    mac_bmc: 00:00:00:00:05:02
     rack: GPU-2
   - name: worker06
     ip: 10.10.0.106
     bmc: 10.20.0.106
     mac_mgmt: 00:00:00:00:06:01
+    mac_bmc: 00:00:00:00:06:02
     rack: GPU-2
   - name: worker07
     ip: 10.10.0.107
     bmc: 10.20.0.107
     mac_mgmt: 00:00:00:00:07:01
+    mac_bmc: 00:00:00:00:07:02
     rack: GPU-2
   - name: worker08
     ip: 10.10.0.108
     bmc: 10.20.0.108
     mac_mgmt: 00:00:00:00:08:01
+    mac_bmc: 00:00:00:00:08:02
     rack: GPU-2
+switches:
+  nodes:
+  - name: leaf-rail0
+    role: rail-leaf
+    mgmt_ip: 10.20.0.41
+    mac_ma1: 00:00:00:00:22:00
+    rack: GPU-1
+  - name: leaf-rail1
+    role: rail-leaf
+    mgmt_ip: 10.20.0.42
+    mac_ma1: 00:00:00:00:22:01
+    rack: GPU-1
+  - name: leaf-rail2
+    role: rail-leaf
+    mgmt_ip: 10.20.0.43
+    mac_ma1: 00:00:00:00:22:02
+    rack: GPU-1
+  - name: leaf-rail3
+    role: rail-leaf
+    mgmt_ip: 10.20.0.44
+    mac_ma1: 00:00:00:00:22:03
+    rack: GPU-1
+  - name: leaf-rail4
+    role: rail-leaf
+    mgmt_ip: 10.20.0.45
+    mac_ma1: 00:00:00:00:22:04
+    rack: GPU-2
+  - name: leaf-rail5
+    role: rail-leaf
+    mgmt_ip: 10.20.0.46
+    mac_ma1: 00:00:00:00:22:05
+    rack: GPU-2
+  - name: leaf-rail6
+    role: rail-leaf
+    mgmt_ip: 10.20.0.47
+    mac_ma1: 00:00:00:00:22:06
+    rack: GPU-2
+  - name: leaf-rail7
+    role: rail-leaf
+    mgmt_ip: 10.20.0.48
+    mac_ma1: 00:00:00:00:22:07
+    rack: GPU-2
+  - name: oob-sw1
+    role: oob-switch
+    mgmt_ip: 10.20.0.11
+    mac_ma1: 00:00:00:00:23:01
+    rack: GPU-1
+  - name: oob-sw2
+    role: oob-switch
+    mgmt_ip: 10.20.0.12
+    mac_ma1: 00:00:00:00:23:02
+    rack: GPU-2
+  - name: spine1
+    role: spine
+    mgmt_ip: 10.20.0.13
+    mac_ma1: 00:00:00:00:21:01
+    rack: BOOT
+  - name: spine2
+    role: spine
+    mgmt_ip: 10.20.0.14
+    mac_ma1: 00:00:00:00:21:02
+    rack: BOOT
 bmc:
   username_env: BMC_USERNAME
   password_env: BMC_PASSWORD

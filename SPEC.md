@@ -113,7 +113,7 @@ Assumes ~42–48U racks; numbers are planning, not final elevation drawings.
 
 | Contents | Qty | RU (approx) |
 | -------- | --: | ----------: |
-| B200 8-GPU servers | 4 | 16–24 (4–6U each) |
+| B200 8-GPU servers (Dell XE9680) | 4 | 24 (6U each) |
 | Rail leaf 7060DX5-32 (share of 8) | 3–5 | 3–5 |
 | OOB 7010TX-48 | 1 | 1 |
 | Patch / fiber manager | 1–2 | 2–4 |
@@ -160,34 +160,36 @@ Cable: 4 servers × 8×400G = **32× 400G** host links per GPU rack.
 
 ## 3. Compute Nodes
 
-### 3.1 GPU Server Quantity
+### 3.1 GPU Server Platform
 
-**8 servers**
+**Standard platform: Dell PowerEdge XE9680** — **8 servers**.
 
-Example platforms:
+| Item | Specification |
+| ---- | ------------- |
+| Model | Dell PowerEdge XE9680 |
+| Chassis | 6U rack server, air-cooled |
+| GPU tray | NVIDIA HGX B200 (8× SXM) |
+| Quantity | **8** (4× GPU-1 + 4× GPU-2) |
 
-- NVIDIA MGX B200 server
-- Dell XE9680-class
-- HPE Cray XD series
-- Supermicro HGX/B200 platform
-- Lenovo ThinkSystem AI server
+Alternates considered (not selected): NVIDIA MGX B200, HPE Cray XD, Supermicro HGX B200, Lenovo ThinkSystem AI. The rail/NIC/rack design is portable to any HGX B200-class 8-GPU node; BOM and RU drawings assume XE9680.
 
 ### 3.2 Per-Server Specification
 
 | Component | Specification |
 | --------- | ------------- |
-| GPU | 8× NVIDIA B200 |
+| Chassis | Dell PowerEdge XE9680 (6U, air-cooled) |
+| GPU | 8× NVIDIA B200 (SXM, HGX B200) |
 | GPU memory | ~1.4 TB HBM3e |
 | GPU compute | ~1.4 PFLOPS FP8 (approx.) |
-| CPU | 2× AMD EPYC Turin / Genoa |
-| CPU cores | 128–192 |
+| CPU | 2× Intel Xeon Scalable (4th/5th Gen) |
+| CPU cores | 96–128 |
 | System RAM | 2 TB DDR5 ECC |
-| Boot | 2× 1.92 TB NVMe RAID1 |
+| Boot | 2× M.2 1.92 TB NVMe RAID1 (BOSS-N1) |
 | Local NVMe | 8× 3.84 TB |
 | Data network | **8× 400GbE** (1 NIC per GPU; rail-optimized) |
-| NIC class | ConnectX-7 / BlueField-3 SuperNIC (or platform equivalent) |
+| NIC class | ConnectX-7 / BlueField-3 SuperNIC (PCIe Gen5 x16 slots) |
 | GPU↔NIC | PCIe locality / GPUDirect RDMA; NIC paired to each B200 |
-| Management | 1× 1/10/25GbE |
+| Management | 1× 1GbE dedicated (iDRAC9) |
 | Power | 8–10 kW |
 
 ### 3.3 Cluster Aggregate Capacity
@@ -196,7 +198,7 @@ Example platforms:
 | -------- | -----: |
 | GPUs | 64 |
 | HBM3e memory | ~11.5 TB |
-| CPU cores | ~1,200 |
+| CPU cores | ~1,000 |
 | System RAM | 16 TB |
 | Local NVMe | ~250 TB |
 | GPU FP8 compute | ~11–12 PFLOPS |
@@ -254,7 +256,7 @@ Prior drafts assumed **2× 400G per server**. That is a common *shared-NIC* ente
 | Shared PCIe NIC | 1–2× 400G | Light east-west; many general GPU clouds |
 | **Rail-optimized (this design)** | **8× 400G** | **1 NIC per GPU**; GPUDirect RDMA; MoE EP / NCCL |
 
-**Baseline:** each B200 has a **dedicated 400GbE** adapter (ConnectX-7, BlueField-3 SuperNIC, or HGX/MGX platform equivalent), PCIe-local to that GPU.
+**Baseline:** each B200 has a **dedicated 400GbE** adapter (ConnectX-7 or BlueField-3 SuperNIC), PCIe-local to that GPU.
 
 ```
   GPU0 ── NIC0 ── 400G ── Rail-0 leaf
@@ -397,7 +399,7 @@ Cable so **GPU0 from every server → Rail0 leaf**, etc., regardless of rack.
 ### 5.6 Server Connectivity (per GPU server)
 
 ```
-        HGX/MGX B200 Server (8 GPUs)
+        Dell PowerEdge XE9680 (HGX B200, 8 GPUs)
         ├── GPU0 ── NIC0 ── 400G ── Rail-0 leaf
         ├── GPU1 ── NIC1 ── 400G ── Rail-1 leaf
         ├── GPU2 ── NIC2 ── 400G ── Rail-2 leaf
@@ -513,10 +515,10 @@ Two OOB switches are dual-homed uplink or MLAG pair so a single OOB switch failu
 
 | Endpoint | Speed | Notes |
 | -------- | ----- | ----- |
-| GPU server BMC (iDRAC/iLO/BMC) | 1G | Always-on lights-out |
-| GPU server optional mgmt NIC | 1G | OS rescue / PXE if used |
+| GPU server BMC (iDRAC) | 1G | Always-on lights-out |
+| GPU server mgmt NIC (mgmt0) | 1G | OS install / PXE (VLAN 10) |
 | K8s control-plane mgmt | 1G | Dedicate ports; not RoCE NICs |
-| 7060DX5 Management1 | 1G | Out-of-band EOS mgmt |
+| 7060DX5 Management1 | 1G | Out-of-band EOS mgmt + **ZTP** |
 | Storage / PDU / serial consoles | 1G | As present |
 | CloudVision / jump / IPMI tools | 1G | Ops plane |
 
@@ -540,7 +542,7 @@ Two OOB switches are dual-homed uplink or MLAG pair so a single OOB switch failu
 | ---- | ---- |
 | Ports | 1–2× 10G (or 25G) SFP28 per 7010TX-48 |
 | Target | Redundant path to mgmt/core or services block |
-| HA | MLAG between the two 7010TX-48 **or** independent L3 with dual default |
+| HA | **MLAG pair** between the two 7010TX-48 (peer-link 2× SFP28) — design in `docs/network.md` §4 |
 
 OOB is **loss-tolerant best-effort** (no RoCE PFC). Do not enable lossless QoS on 7010TX-48.
 
@@ -1081,7 +1083,7 @@ For a research organization running interactive multi-trillion MoE inference:
 
 | Layer | Choice |
 | ----- | ------ |
-| Compute | 64× B200 / 8× 8-GPU nodes / **2 GPU racks** |
+| Compute | 64× B200 / 8× Dell PowerEdge XE9680 / **2 GPU racks** |
 | Facility | **4 racks:** GPU-1, GPU-2, **BOOT**, **STOR** |
 | Network | **8×400G/node** rail fabric: 8× DX5-32 + 2× DX5-64S; **7010TX-48** OOB |
 | Storage | 100TB+ NVMe model repository |
@@ -1097,13 +1099,16 @@ This is the scale at which the system behaves like a real AI supercomputer while
 Follow-on specs (to be written next):
 
 1. `docs/bom.md` — bill of materials and SKUs  
-2. `docs/network.md` — underlay, RoCE, QoS, IP plan  
+2. ~~`docs/network.md`~~ — **done** (ZTP day-0, numbered eBGP underlay, RoCEv2 lossless profile)  
 3. ~~`docs/bootstrap.md`~~ — **done** (BOOT seed, Metal3/CAPI, Flux platform) + `bootstrap/`  
 4. ~~`docs/netbox.md` / `docs/cabling.md`~~ — **done** (NetBox DCIM/IPAM SoT + cabling export)  
 5. `docs/k8s.md` — day-2 cluster ops, tenancy, upgrades  
 6. `docs/storage.md` — model repo layout and performance targets  
 7. `docs/facility.md` — rack elevations, power, cooling  
 8. `docs/slo.md` — latency/throughput SLOs and capacity model  
+9. ~~`docs/build-guide.md`~~ — **done** (physical build: rack, power, cable, bring-up, burn-in)  
+10. ~~`docs/overlay.md`~~ — **done** (EVPN/VXLAN overlay: vrf `storage` + vrf `edge`, border, API ingress)  
+11. ~~`docs/serving.md`~~ — **done** (Kimi K2 Thinking deploy, inference scheduler, API gateway/auth, capture wiring)
 
 ---
 
@@ -1121,3 +1126,6 @@ Follow-on specs (to be written next):
 | 0.8 | 2026-07-18 | Facility: 4 racks (2× GPU + BOOT + STOR); STOR-2 optional |
 | 0.9 | 2026-07-18 | Bootstrap stack: seed + Metal3/CAPI + Flux platform (`bootstrap/`, `docs/bootstrap.md`) |
 | 1.0 | 2026-07-18 | NetBox SoT: inventory, IPAM, cabling guide (`bootstrap/netbox/`, `docs/netbox.md`, `docs/cabling.md`) |
+| 1.1 | 2026-07-19 | GPU servers standardized on Dell PowerEdge XE9680 (8×, 6U) |
+| 1.2 | 2026-07-19 | Network: ZTP day-0 (OOB bench ZTP → relay ZTP), eBGP underlay, RoCEv2 lossless profile (`docs/network.md`); OOB = MLAG pair; +mgmt0/Ma1/peer cabling (169 cables) |
+| 1.3 | 2026-07-19 | EVPN/VXLAN overlay (vrf storage/edge, border — `docs/overlay.md`); Kimi K2 Thinking deployment + inference scheduler + API access (`docs/serving.md`, `bootstrap/platform/apps/{models,api}`) |

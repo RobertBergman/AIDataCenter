@@ -2,6 +2,13 @@
 
 NetBox owns **DCIM, IPAM, inventory, and cabling** for the AI cluster. Git holds schema + seed + export tooling; live assignments (MACs, BMC IPs after scan, cable labels) live in NetBox.
 
+> Pinned to **NetBox v4.6.5** (`docker-compose.yaml`, `platform/apps/netbox`). Notable 4.5/4.6 behaviors this tooling accounts for:
+>
+> - **v2 API tokens** (`nbt_<key>.<secret>`, Bearer auth) — require `API_TOKEN_PEPPER_1` set in `.env`; legacy v1 tokens still work but are removed in NetBox 4.7.
+> - **MAC addresses are first-class objects** — interfaces get a `MACAddress` assigned and marked primary; the old `mac_address` write field is read-only.
+> - **Prefixes are generically scoped** (`scope_type`/`scope_id`), no direct `site` FK.
+> - **VLANs attach to a site-scoped VLAN group** — direct VLAN→site assignment is deprecated.
+
 ```
   bootstrap/netbox/seed/site.yaml   ← design intent (versioned)
            │
@@ -27,12 +34,12 @@ NetBox owns **DCIM, IPAM, inventory, and cabling** for the AI cluster. Git holds
 
 ```bash
 cd bootstrap/netbox
-cp env.example .env   # set SUPERUSER_* and SECRET_KEY
+cp env.example .env   # set SECRET_KEY, API_TOKEN_PEPPER_1, SUPERUSER_*
 docker compose up -d
-# wait until http://seed:8081 healthy
+# wait until http://seed:8081 healthy (first boot migrates; can take ~3 min)
 
 export NETBOX_URL=http://127.0.0.1:8081
-export NETBOX_TOKEN=$(./scripts/create_token.sh)   # or UI: Admin → API tokens
+export NETBOX_TOKEN=$(./scripts/create_token.sh)   # v2 token: nbt_<key>.<secret>
 
 python3 scripts/import_seed.py
 python3 scripts/export_inventory.py -o ../inventory/cluster.yaml
@@ -56,10 +63,12 @@ BMC_USERNAME=… BMC_PASSWORD=… bash ../scripts/02-apply-cluster.sh
 | Device type | B200 server, 7060DX5-32, 7060DX5-64S, 7010TX-48, … |
 | Platform | `ubuntu-24.04`, `eos` |
 | Interface | `mgmt0`, `bmc`, `rail0`…`rail7`, `EthernetN` on switches |
+| MAC address | Discrete MACAddress objects, primary per interface (4.2+ model) |
 | Cable | Host↔leaf rail, leaf↔spine, BMC↔OOB, mgmt |
-| Prefix | Mgmt, OOB, fabric underlay, K8s pod/service (documented) |
+| Prefix | Mgmt, OOB, fabric underlay, K8s pod/service — site-scoped via `scope_type` |
 | IP address | Primary mgmt, BMC, VIP, service endpoints |
-| VLAN | mgmt (10), oob (20), fabric underlay / RoCE VRFs |
+| VLAN group | Site-scoped group holding all cluster VLANs |
+| VLAN | mgmt (10), oob (20), fabric underlay / RoCE VRFs — in the site VLAN group |
 | Cluster type + Cluster | Kubernetes `ai-cluster` |
 | Virtual chassis (opt) | MLAG OOB pair |
 | Custom fields | `k8s_role`, `gpu_count`, `rail_index`, `redfish_url` |
@@ -81,7 +90,7 @@ Custom fields defined in seed import (idempotent).
 | `scripts/export_cabling.py` | Cable matrix markdown + CSV |
 | `scripts/export_ipam.py` | Prefix/IP YAML for ops |
 | `scripts/export_dnsmasq.py` | `dhcp-host=` lines from mgmt+MAC |
-| `scripts/create_token.sh` | Bootstrap API token via Django |
+| `scripts/create_token.sh` | Provision a v2 API token (`nbt_…`) via `/api/users/tokens/provision/` |
 
 ## Related docs
 

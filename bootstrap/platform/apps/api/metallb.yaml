@@ -1,0 +1,72 @@
+# MetalLB — announces LoadBalancer VIPs (10.50.0.0/24) into VRF edge.
+#
+# BGP mode (AS 65200) over the workers' VLAN 50 subinterfaces; peers are the
+# real Vlan50 SVI IPs of leaf-rail0 (.2, AS 65101) and leaf-rail7 (.9, AS
+# 65108), which run `bgp listen range 10.50.64.0/24` in vrf edge
+# (docs/overlay.md §4). Campus reaches the VIPs via spine border → EVPN.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: metallb
+  namespace: metallb-system
+spec:
+  interval: 1h
+  url: https://metallb.github.io/metallb
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metallb
+  namespace: metallb-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: metallb
+      version: 0.14.9
+      sourceRef:
+        kind: HelmRepository
+        name: metallb
+  values:
+    speaker:
+      nodeSelector:
+        nvidia.com/gpu.present: "true"   # VLAN 50 subifs exist on GPU workers
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: edge-vips
+  namespace: metallb-system
+spec:
+  addresses:
+    - 10.50.0.10-10.50.0.250
+  autoAssign: false          # VIPs are IPAM-allocated in NetBox first
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: leaf-rail0-edge
+  namespace: metallb-system
+spec:
+  myASN: 65200
+  peerASN: 65101
+  peerAddress: 10.50.64.2
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: leaf-rail7-edge
+  namespace: metallb-system
+spec:
+  myASN: 65200
+  peerASN: 65108
+  peerAddress: 10.50.64.9
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: edge-vips
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - edge-vips

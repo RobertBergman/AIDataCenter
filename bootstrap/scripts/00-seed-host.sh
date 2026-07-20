@@ -75,6 +75,15 @@ sed "s/{{ seed_ip }}/${SEED_IP}/g; s/{{ domain }}/${DOMAIN}/g" \
 sudo mkdir -p /var/www/html
 sudo cp "${OUT}/matchbox/boot.ipxe" /var/www/html/boot.ipxe
 
+echo "==> Rendering Arista ZTP payload"
+if [[ -f "${SEED_DIR}/ztp/render.py" ]]; then
+  python3 "${SEED_DIR}/ztp/render.py" -o "${OUT}/ztp"
+  sudo mkdir -p /var/www/html/ztp
+  sudo cp "${SEED_DIR}/ztp/ztp.py" /var/www/html/ztp/ztp.py
+  sudo cp -r "${OUT}/ztp/." /var/www/html/ztp/
+  echo "    ZTP: $(ls "${OUT}/ztp/configs" | wc -l) switch configs → http://${SEED_IP}/ztp/"
+fi
+
 echo "==> Enabling services"
 sudo systemctl enable --now chrony
 sudo systemctl restart dnsmasq

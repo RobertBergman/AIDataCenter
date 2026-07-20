@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIDataCenter — Live Bootstrap Demo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">◆</div>
+        <div>
+          <h1>AIDataCenter</h1>
+          <p class="subtitle">64× B200 · Simulated bring-up → Kimi K2 serving</p>
+        </div>
+      </div>
+      <div class="stats" id="stats">
+        <div class="stat"><span class="k">GPUs</span><span class="v" id="stat-gpus">0 / 64</span></div>
+        <div class="stat"><span class="k">Nodes</span><span class="v" id="stat-nodes">0 ready</span></div>
+        <div class="stat"><span class="k">Switches</span><span class="v" id="stat-sw">0 / 12</span></div>
+        <div class="stat"><span class="k">Cables</span><span class="v" id="stat-cables">0 / 169</span></div>
+        <div class="stat"><span class="k">Apps</span><span class="v" id="stat-apps">0 / 10</span></div>
+        <div class="stat"><span class="k">Model</span><span class="v" id="stat-model">—</span></div>
+      </div>
+      <div class="controls">
+        <label class="speed">
+          Speed
+          <input type="range" id="speed" min="0.5" max="4" step="0.5" value="1.5" />
+        </label>
+        <button id="btn-run" class="primary">▶ Run all</button>
+        <button id="btn-step">Step ▶</button>
+        <button id="btn-pause" disabled>Pause</button>
+        <button id="btn-reset" class="ghost">Reset</button>
+      </div>
+    </header>
+
+    <section class="phases" id="phases"></section>
+
+    <main class="main">
+      <aside class="sidebar">
+        <h2>Event log</h2>
+        <div class="log" id="log"></div>
+      </aside>
+
+      <section class="center">
+        <div class="tabs">
+          <button class="tab active" data-view="topology" type="button">Racks &amp; fabric</button>
+          <button class="tab" data-view="cabling" type="button">Cabling map <span class="tab-count" id="cable-count"></span></button>
+        </div>
+
+        <div class="view" id="view-topology">
+          <div class="racks" id="racks"></div>
+          <div class="fabric-panel">
+            <h2>Rail fabric <span class="muted">8×400G RoCEv2</span></h2>
+            <div class="fabric" id="fabric"></div>
+          </div>
+        </div>
+
+        <div class="view hidden" id="view-cabling">
+          <div class="cabling-wrap">
+            <div class="cable-legend" id="cable-legend"></div>
+            <svg id="cabling-svg" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet" role="img"
+                 aria-label="Cabling map: workers to rail leaves to spines and OOB switches"></svg>
+          </div>
+        </div>
+
+        <div class="term-panel">
+          <div class="term-head">
+            <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
+            <span class="term-title">operator@workstation — live terminal</span>
+            <button id="term-clear" class="term-clear" type="button">clear</button>
+          </div>
+          <div class="term" id="term"></div>
+        </div>
+      </section>
+
+      <aside class="detail-panel">
+        <h2>Inspector</h2>
+        <div id="detail" class="detail empty">
+          <p>Click any device, switch, cable endpoint, or platform app to inspect it.</p>
+        </div>
+        <h2 class="mt">Platform (Flux)</h2>
+        <div id="apps" class="apps"></div>
+      </aside>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

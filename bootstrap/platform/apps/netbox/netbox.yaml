@@ -23,6 +23,8 @@ spec:
   chart:
     spec:
       chart: netbox
+      # Chart 8.x tracks NetBox 4.6.x (appVersion v4.6.5 as of chart 8.3.37).
+      version: ">=8.3.0 <9.0.0"
       sourceRef:
         kind: HelmRepository
         name: netbox
@@ -30,7 +32,13 @@ spec:
   values:
     replicaCount: 2
     image:
-      tag: v4.2.6
+      tag: v4.6.5
+    # NetBox 4.5+ v2 API tokens need HMAC peppers; the chart auto-generates
+    # and preserves one (values: apiTokenPeppers) — leave empty for day-2.
+    # Housekeeping runs as a built-in system job since NetBox 4.4; the
+    # chart's legacy CronJob (deprecated manage.py housekeeping) is redundant.
+    housekeeping:
+      enabled: false
     superuser:
       name: admin
       email: netbox@ai.local

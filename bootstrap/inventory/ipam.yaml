@@ -1,5 +1,5 @@
 # GENERATED from NetBox — do not hand-edit
-generated_at: '2026-07-18T19:10:26.903369+00:00'
+generated_at: '2026-07-20T02:22:39.818518+00:00'
 source: seed/site.yaml
 prefixes:
 - prefix: 10.10.0.0/24
@@ -17,11 +17,59 @@ prefixes:
   status: container
   description: Fabric underlay container
   role: fabric
+- prefix: 10.30.0.0/24
+  status: active
+  description: 'Fabric loopbacks /32 (BGP router-ids): spines .1-.2, leaves .11-.18'
+  role: fabric
+- prefix: 10.30.0.0/19
+  status: container
+  description: 'Leaf-spine p2p /31 pool: leaf-rail{i} uses 10.30.{2i+1}.0/29 (spine1)
+    + 10.30.{2i+2}.0/29 (spine2)'
+  role: fabric
+- prefix: 10.30.64.0/19
+  status: container
+  description: 'Host rail subnets: rail{i} = 10.30.{64+i}.0/24 (leaf .1, worker0N
+    .1N)'
+  role: fabric
+- prefix: 10.30.32.0/24
+  status: active
+  description: 'VTEP loopbacks (Loopback1): spines .1-.2, leaves .11-.18 (EVPN/VXLAN,
+    docs/overlay.md)'
+  role: fabric
 - prefix: 10.40.0.0/16
+  status: container
+  description: Storage data (VRF storage, L3VNI 50200)
+  role: storage
+- prefix: 10.40.0.0/24
+  status: active
+  description: 'Storage p2p /31 (vrf storage): leaf-rail0 Eth25-28 .0-.7, leaf-rail7
+    Eth25-28 .8-.15'
+  role: storage
+- prefix: 10.40.64.0/24
   vlan: storage
   status: active
-  description: Storage data
+  description: 'Storage access VLAN 200: VARP gw .1, leaf-rail{i} .{2+i}, worker0N
+    .1N (tagged subif)'
   role: storage
+- prefix: 10.50.0.0/16
+  status: container
+  description: Edge / API services (VRF edge, L3VNI 50050)
+  role: edge
+- prefix: 10.50.0.0/24
+  status: active
+  description: 'LoadBalancer VIP pool (MetalLB BGP): inference gateway .10'
+  role: edge
+- prefix: 10.50.64.0/24
+  vlan: edge-access
+  status: active
+  description: 'Edge access VLAN 50: VARP gw .1, leaf-rail{i} .{2+i}, worker0N .1N
+    (tagged subif); MetalLB peers leaf .2/.9'
+  role: edge
+- prefix: 10.50.255.0/29
+  status: active
+  description: "Border p2p /31 (vrf edge): spine1 Eth33 .0/31, spine2 Eth33 .2/31\
+    \ \u2192 campus firewall AS 65500"
+  role: edge
 - prefix: 10.96.0.0/12
   status: container
   description: Kubernetes services (documented)
@@ -39,6 +87,14 @@ gateways:
   dns_name: gw-oob.ai.local
   description: OOB gateway
   role: anycast
+- address: 10.40.64.1/24
+  dns_name: gw-storage.ai.local
+  description: Storage access VARP gateway (VRF storage)
+  role: anycast
+- address: 10.50.64.1/24
+  dns_name: gw-edge.ai.local
+  description: Edge access VARP gateway (VRF edge)
+  role: anycast
 vips:
 - address: 10.10.0.20/24
   dns_name: api.ai.local
@@ -47,6 +103,10 @@ vips:
 - address: 10.10.0.31/24
   dns_name: registry.ai.local
   description: Harbor VIP/primary
+  role: vip
+- address: 10.50.0.10/24
+  dns_name: inference.ai.local
+  description: Inference API gateway VIP (Envoy, MetalLB)
   role: vip
 device_ips:
 - device: seed01

@@ -37,6 +37,8 @@ def main() -> int:
 
     domain = inv["cluster"]["domain"]
     lines = ["# GENERATED from NetBox inventory — dhcp-host static leases", f"# domain {domain}"]
+
+    lines.append("# mgmt VLAN 10 — server mgmt0 (OS/PXE)")
     for group in ("control_plane", "utility", "gpu_workers"):
         nodes = inv.get(group, {}).get("nodes") or []
         for n in nodes:
@@ -45,6 +47,27 @@ def main() -> int:
             name = n.get("name")
             if mac and ip and name:
                 lines.append(f"dhcp-host={mac},{ip},{name},infinite")
+
+    lines.append("# OOB VLAN 20 — server BMC (via relay 10.20.0.1)")
+    for group in ("control_plane", "utility", "gpu_workers"):
+        nodes = inv.get(group, {}).get("nodes") or []
+        for n in nodes:
+            mac = n.get("mac_bmc")
+            ip = n.get("bmc")
+            name = n.get("name")
+            if mac and ip and name:
+                lines.append(f"dhcp-host={mac},{ip},{name}-bmc,infinite")
+
+    lines.append("# OOB VLAN 20 — fabric switch Management1 (Arista ZTP, option 67 via tag ztp)")
+    for n in inv.get("switches", {}).get("nodes") or []:
+        mac = n.get("mac_ma1")
+        ip = n.get("mgmt_ip")
+        name = n.get("name")
+        if not (mac and ip and name):
+            continue
+        if n.get("role") in ("spine", "rail-leaf"):
+            lines.append(f"dhcp-host={mac},set:ztp,{ip},{name},infinite")
+        lines.append(f"address=/{name}.{domain}/{ip}")
 
     seed = inv.get("seed", {})
     if seed.get("ip"):

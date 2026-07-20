@@ -1,0 +1,97 @@
+# Kimi K2 Thinking — production interactive model (docs/serving.md).
+#
+# 1T-param MoE (32B active), native INT4 QAT (~594 GB weights), 256K context.
+# Layout: TP=8 inside one XE9680 (weights + KV fit in 1.4 TB HBM; TP rides
+# NVLink, never the rail fabric). One replica per node; replicas are the
+# scale-out unit and the EPP scheduler (apps/api) balances across them.
+# 4 replicas day-1 = 32 GPUs; remaining 4 nodes serve Ray/research until
+# promoted to replicas 5-8 (see docs/serving.md §4.2).
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: kimi-k2-thinking
+  namespace: inference
+  labels:
+    app.kubernetes.io/part-of: inference-serving
+spec:
+  predictor:
+    minReplicas: 4
+    maxReplicas: 8
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    containers:
+      - name: kserve-container
+        image: registry.ai.local/library/vllm-openai:v0.11.0
+        args:
+          - --model=/models/kimi-k2-thinking/current
+          - --served-model-name=kimi-k2-thinking
+          - --trust-remote-code
+          - --tensor-parallel-size=8
+          - --max-model-len=262144
+          - --max-num-seqs=32
+          - --gpu-memory-utilization=0.92
+          - --enable-auto-tool-choice
+          - --tool-call-parser=kimi_k2
+          - --reasoning-parser=kimi_k2
+          - --port=8000
+        env:
+          - name: VLLM_LOGGING_LEVEL
+            value: INFO
+        ports:
+          - containerPort: 8000
+            name: http
+            protocol: TCP
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 15
+          failureThreshold: 240   # weight load + engine init ≤ 60 min
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+        resources:
+          requests:
+            nvidia.com/gpu: "8"
+            cpu: "64"
+            memory: 1200Gi
+          limits:
+            nvidia.com/gpu: "8"
+            memory: 1600Gi
+        volumeMounts:
+          - name: models
+            mountPath: /models
+            readOnly: true
+          - name: shm
+            mountPath: /dev/shm
+    volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: models-rwx
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 64Gi
+---
+# vLLM metrics (TTFT/TPOT/queue/KV-cache — SPEC §11.3) → kube-prometheus-stack
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kimi-k2-thinking
+  namespace: inference
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      serving.kserve.io/inferenceservice: kimi-k2-thinking
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

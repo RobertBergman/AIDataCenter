@@ -1,0 +1,71 @@
+# Inference scheduler (SPEC §8: "Inference Scheduler") — Gateway API
+# Inference Extension.
+#
+# The chart deploys the InferencePool + its endpoint-picker (EPP): an
+# ext-proc service the gateway consults per request. Instead of round-robin,
+# the EPP scores the vLLM replicas on live queue depth, KV-cache utilization
+# and prefix-cache affinity, and picks the endpoint — this is what keeps
+# TTFT interactive at ~50 concurrent users (docs/serving.md §5).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: inferencepool
+  namespace: inference
+spec:
+  interval: 1h
+  url: oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+  ref:
+    tag: v0.3.0
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kimi-k2-thinking          # release name == InferencePool name
+  namespace: inference
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: inferencepool
+      version: v0.3.0
+      sourceRef:
+        kind: OCIRepository
+        name: inferencepool
+  values:
+    inferencePool:
+      targetPortNumber: 8000
+      modelServers:
+        matchLabels:
+          serving.kserve.io/inferenceservice: kimi-k2-thinking
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
+metadata:
+  name: kimi-k2-thinking
+  namespace: inference
+spec:
+  modelName: kimi-k2-thinking
+  criticality: Critical
+  poolRef:
+    name: kimi-k2-thinking
+---
+# Route: everything under /v1 (OpenAI API surface served by vLLM) → pool
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: inference-v1
+  namespace: inference
+spec:
+  parentRefs:
+    - name: inference-gw
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+      backendRefs:
+        - group: inference.networking.x-k8s.io
+          kind: InferencePool
+          name: kimi-k2-thinking
+      timeouts:
+        request: 600s            # long generations; streaming keeps it live

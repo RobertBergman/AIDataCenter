@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from nb_lib import load_seed, netbox_client  # noqa: E402
+from nb_lib import load_seed, ma1_mac, netbox_client  # noqa: E402
 
 
 def primary_ip(dev) -> str | None:
@@ -92,20 +92,43 @@ def main() -> int:
                 if d["role"] != role:
                     continue
                 mac = None
+                mac_bmc = None
                 for i in d.get("interfaces") or []:
                     if i["name"] == exp["mgmt_interface"]:
                         mac = i.get("mac")
-                if role == "gpu-worker" and not mac:
+                    if i["name"] == exp["bmc_interface"]:
+                        mac_bmc = i.get("mac")
+                if role == "gpu-worker":
                     idx = int(d["name"].replace("worker", ""))
-                    mac = f"00:00:00:00:{idx:02x}:01"
+                    if not mac:
+                        mac = f"00:00:00:00:{idx:02x}:01"
+                    if not mac_bmc:
+                        mac_bmc = f"00:00:00:00:{idx:02x}:02"
                 out.append(
                     {
                         "name": d["name"],
                         "ip": d.get("primary_ip4", "").split("/")[0],
                         "bmc": (d.get("bmc_ip") or "").split("/")[0] or None,
                         "mac_mgmt": mac,
+                        "mac_bmc": mac_bmc,
                         "rack": d.get("rack"),
                         "netbox": f"offline:{d['name']}",
+                    }
+                )
+            return sorted(out, key=lambda x: x["name"])
+
+        def switches_offline():
+            out = []
+            for d in devices:
+                if d["role"] not in ("spine", "rail-leaf", "oob-switch"):
+                    continue
+                out.append(
+                    {
+                        "name": d["name"],
+                        "role": d["role"],
+                        "mgmt_ip": (d.get("mgmt_ip") or "").split("/")[0] or None,
+                        "mac_ma1": ma1_mac(d),
+                        "rack": d.get("rack"),
                     }
                 )
             return sorted(out, key=lambda x: x["name"])
@@ -122,11 +145,13 @@ def main() -> int:
             cp=nodes_for("control-plane"),
             util=nodes_for("utility"),
             gpu=nodes_for("gpu-worker"),
+            sw=switches_offline(),
             source="seed/site.yaml (offline)",
         )
     else:
         nb = netbox_client()
         by_role: dict[str, list] = defaultdict(list)
+        sw_online: list[dict] = []
         for dev in nb.dcim.devices.filter(site=seed["site"]["slug"]):
             r = role_slug(dev)
             mac = iface_mac(nb, dev.id, exp["mgmt_interface"])
@@ -136,10 +161,21 @@ def main() -> int:
                 "ip": primary_ip(dev),
                 "bmc": bmc,
                 "mac_mgmt": mac,
+                "mac_bmc": iface_mac(nb, dev.id, exp["bmc_interface"]),
                 "rack": rack_name(dev),
                 "netbox_id": dev.id,
             }
             by_role[r].append(entry)
+            if r in ("spine", "rail-leaf", "oob-switch"):
+                sw_online.append(
+                    {
+                        "name": dev.name,
+                        "role": r,
+                        "mgmt_ip": iface_ip(nb, dev.id, "Management1"),
+                        "mac_ma1": iface_mac(nb, dev.id, "Management1"),
+                        "rack": rack_name(dev),
+                    }
+                )
 
         for r in by_role:
             by_role[r] = sorted(by_role[r], key=lambda x: x["name"])
@@ -157,6 +193,7 @@ def main() -> int:
             cp=by_role.get(exp["control_plane_role"], []),
             util=by_role.get(exp["utility_role"], []),
             gpu=by_role.get(exp["gpu_worker_role"], []),
+            sw=sorted(sw_online, key=lambda x: x["name"]),
             source=f"netbox:{os_netbox_url()}",
         )
 
@@ -179,7 +216,7 @@ def os_netbox_url() -> str:
     return os.environ.get("NETBOX_URL", "http://127.0.0.1:8081")
 
 
-def _assemble(seed, exp, domain, seed_host, cp, util, gpu, source: str):
+def _assemble(seed, exp, domain, seed_host, cp, util, gpu, sw, source: str):
     inv = {
         "cluster": {
             "name": seed["cluster"]["name"],
@@ -218,6 +255,7 @@ def _assemble(seed, exp, domain, seed_host, cp, util, gpu, source: str):
                     "ip": n["ip"],
                     "bmc": n.get("bmc"),
                     "mac_mgmt": n.get("mac_mgmt"),
+                    "mac_bmc": n.get("mac_bmc"),
                     "rack": n.get("rack"),
                 }
                 for n in cp
@@ -230,6 +268,7 @@ def _assemble(seed, exp, domain, seed_host, cp, util, gpu, source: str):
                     "ip": n["ip"],
                     "bmc": n.get("bmc"),
                     "mac_mgmt": n.get("mac_mgmt"),
+                    "mac_bmc": n.get("mac_bmc"),
                     "rack": n.get("rack"),
                 }
                 for n in util
@@ -244,9 +283,22 @@ def _assemble(seed, exp, domain, seed_host, cp, util, gpu, source: str):
                     "ip": n["ip"],
                     "bmc": n.get("bmc"),
                     "mac_mgmt": n.get("mac_mgmt"),
+                    "mac_bmc": n.get("mac_bmc"),
                     "rack": n.get("rack"),
                 }
                 for n in gpu
+            ],
+        },
+        "switches": {
+            "nodes": [
+                {
+                    "name": n["name"],
+                    "role": n["role"],
+                    "mgmt_ip": n.get("mgmt_ip"),
+                    "mac_ma1": n.get("mac_ma1"),
+                    "rack": n.get("rack"),
+                }
+                for n in sw
             ],
         },
         "bmc": {

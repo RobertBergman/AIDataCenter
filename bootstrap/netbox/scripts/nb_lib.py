@@ -69,6 +69,44 @@ def ip_only(cidr: str | None) -> str | None:
     return cidr.split("/")[0]
 
 
+def ensure_primary_mac(nb, iface, mac: str, description: str = ""):
+    """Assign a MAC to an interface and mark it primary.
+
+    NetBox 4.2+ models MACs as discrete MACAddress objects; the legacy
+    ``mac_address`` write field on interfaces is read-only in the 4.6 API.
+    Idempotent: reuses an existing MACAddress with the same value when free
+    or already attached to this interface.
+    """
+    mac = mac.upper()
+    mac_obj = None
+    for m in nb.dcim.mac_addresses.filter(mac_address=mac):
+        if m.assigned_object_id == iface.id:
+            mac_obj = m
+            break
+        if mac_obj is None and not m.assigned_object_id:
+            mac_obj = m
+    if mac_obj is None:
+        mac_obj = nb.dcim.mac_addresses.create(
+            {
+                "mac_address": mac,
+                "assigned_object_type": "dcim.interface",
+                "assigned_object_id": iface.id,
+                "description": description,
+            }
+        )
+    elif mac_obj.assigned_object_id != iface.id:
+        mac_obj.assigned_object_type = "dcim.interface"
+        mac_obj.assigned_object_id = iface.id
+        mac_obj.save()
+
+    current = getattr(iface, "primary_mac_address", None)
+    current_id = getattr(current, "id", None) if current else None
+    if current_id != mac_obj.id:
+        iface.primary_mac_address = mac_obj.id
+        iface.save()
+    return mac_obj
+
+
 def expand_gpu_interfaces(device: dict) -> list[dict]:
     """Ensure mgmt0, bmc, rail0-7 exist for GPU workers."""
     ifaces = list(device.get("interfaces") or [])
@@ -109,6 +147,21 @@ def expand_gpu_interfaces(device: dict) -> list[dict]:
     return ifaces
 
 
+def ma1_mac(device: dict) -> str | None:
+    """Deterministic placeholder MAC for a switch Management1 interface.
+
+    Replaced with the real burned-in MAC at staging (build-guide §5).
+    """
+    name, role = device.get("name", ""), device.get("role", "")
+    if role == "spine":
+        return f"00:00:00:00:21:0{int(name.replace('spine', ''))}"
+    if role == "rail-leaf":
+        return f"00:00:00:00:22:0{int(name.replace('leaf-rail', ''))}"
+    if role == "oob-switch":
+        return f"00:00:00:00:23:0{int(name.replace('oob-sw', ''))}"
+    return None
+
+
 def expand_switch_interfaces(device: dict) -> list[dict]:
     ifaces = list(device.get("interfaces") or [])
     names = {i["name"] for i in ifaces}
@@ -125,7 +178,14 @@ def expand_switch_interfaces(device: dict) -> list[dict]:
                     }
                 )
         if "Management1" not in names:
-            ifaces.append({"name": "Management1", "type": "1000base-t", "mgmt_only": True})
+            ifaces.append(
+                {
+                    "name": "Management1",
+                    "type": "1000base-t",
+                    "mac": ma1_mac(device),
+                    "mgmt_only": True,
+                }
+            )
     elif role == "spine":
         for p in range(1, 65):
             n = f"Ethernet{p}"
@@ -138,14 +198,28 @@ def expand_switch_interfaces(device: dict) -> list[dict]:
                     }
                 )
         if "Management1" not in names:
-            ifaces.append({"name": "Management1", "type": "1000base-t", "mgmt_only": True})
+            ifaces.append(
+                {
+                    "name": "Management1",
+                    "type": "1000base-t",
+                    "mac": ma1_mac(device),
+                    "mgmt_only": True,
+                }
+            )
     elif role == "oob-switch":
         for p in range(1, 49):
             n = f"Ethernet{p}"
             if n not in names:
                 ifaces.append({"name": n, "type": "1000base-t", "description": f"port {p}"})
         if "Management1" not in names:
-            ifaces.append({"name": "Management1", "type": "1000base-t", "mgmt_only": True})
+            ifaces.append(
+                {
+                    "name": "Management1",
+                    "type": "1000base-t",
+                    "mac": ma1_mac(device),
+                    "mgmt_only": True,
+                }
+            )
     return ifaces
 
 
@@ -216,16 +290,22 @@ def build_leaf_spine_cables(seed: dict) -> list[dict]:
     return cables
 
 
-def build_oob_cables(seed: dict) -> list[dict]:
+OOB_RACK_MAP = {"GPU-1": "oob-sw1", "GPU-2": "oob-sw2", "BOOT": "oob-sw1", "STOR": "oob-sw2"}
+
+
+def _fresh_cursor() -> dict:
+    return {s: 1 for s in set(OOB_RACK_MAP.values())}
+
+
+def build_oob_cables(seed: dict, cursor: dict | None = None) -> list[dict]:
     """BMC of servers → rack OOB switch."""
     pol = seed["cabling_policy"]["oob"]
-    rack_oob = {"GPU-1": "oob-sw1", "GPU-2": "oob-sw2", "BOOT": "oob-sw1", "STOR": "oob-sw2"}
-    port_cursor = {s: 1 for s in rack_oob.values()}
+    port_cursor = cursor if cursor is not None else _fresh_cursor()
     cables = []
     for d in seed["devices"]:
         if not d.get("bmc_ip"):
             continue
-        oob = rack_oob.get(d["rack"])
+        oob = OOB_RACK_MAP.get(d["rack"])
         if not oob:
             continue
         port = port_cursor[oob]
@@ -239,11 +319,103 @@ def build_oob_cables(seed: dict) -> list[dict]:
                 "status": "planned",
                 "a": {"device": d["name"], "iface": "bmc"},
                 "b": {"device": oob, "iface": f"Ethernet{port}"},
-                "description": f"BMC {d['name']} → {oob}",
+                "description": f"BMC {d['name']} → {oob} (VLAN 20)",
+            }
+        )
+    return cables
+
+
+def build_mgmt_cables(seed: dict, cursor: dict | None = None) -> list[dict]:
+    """Server mgmt0 (OS/PXE, VLAN 10) → rack OOB switch."""
+    pol = seed["cabling_policy"].get("mgmt") or {}
+    if not pol.get("enabled"):
+        return []
+    port_cursor = cursor if cursor is not None else _fresh_cursor()
+    mgmt_iface = seed.get("export", {}).get("mgmt_interface", "mgmt0")
+    cables = []
+    for d in seed["devices"]:
+        if d["role"] not in ("bootstrap", "control-plane", "utility", "gpu-worker"):
+            continue
+        if not d.get("primary_ip4"):
+            continue
+        oob = OOB_RACK_MAP.get(d["rack"])
+        if not oob:
+            continue
+        port = port_cursor[oob]
+        port_cursor[oob] = port + 1
+        label = pol["label_template"].format(device=d["name"])
+        cables.append(
+            {
+                "label": label,
+                "type": pol["media"],
+                "color": pol.get("color"),
+                "status": "planned",
+                "a": {"device": d["name"], "iface": mgmt_iface},
+                "b": {"device": oob, "iface": f"Ethernet{port}"},
+                "description": f"mgmt0 {d['name']} → {oob} (VLAN 10)",
+            }
+        )
+    return cables
+
+
+def build_switch_mgmt_cables(seed: dict, cursor: dict | None = None) -> list[dict]:
+    """Fabric switch Management1 (VLAN 20, ZTP) → rack OOB switch."""
+    pol = seed["cabling_policy"].get("switch_mgmt") or {}
+    if not pol:
+        return []
+    port_cursor = cursor if cursor is not None else _fresh_cursor()
+    cables = []
+    for d in seed["devices"]:
+        if d["role"] not in ("spine", "rail-leaf"):
+            continue
+        oob = OOB_RACK_MAP.get(d["rack"])
+        if not oob:
+            continue
+        port = port_cursor[oob]
+        port_cursor[oob] = port + 1
+        label = pol["label_template"].format(device=d["name"])
+        cables.append(
+            {
+                "label": label,
+                "type": pol["media"],
+                "color": pol.get("color"),
+                "status": "planned",
+                "a": {"device": d["name"], "iface": "Management1"},
+                "b": {"device": oob, "iface": f"Ethernet{port}"},
+                "description": f"Ma1 {d['name']} → {oob} (VLAN 20, ZTP)",
+            }
+        )
+    return cables
+
+
+def build_oob_peer_cables(seed: dict) -> list[dict]:
+    """oob-sw1 <-> oob-sw2 MLAG peer-link (2× SFP28)."""
+    pol = seed["cabling_policy"].get("oob_peer") or {}
+    if not pol:
+        return []
+    cables = []
+    for n, port in enumerate(pol.get("ports", [49, 50]), start=1):
+        cables.append(
+            {
+                "label": pol["label_template"].format(n=n),
+                "type": pol["media"],
+                "color": pol.get("color"),
+                "status": "planned",
+                "a": {"device": "oob-sw1", "iface": f"Ethernet{port}"},
+                "b": {"device": "oob-sw2", "iface": f"Ethernet{port}"},
+                "description": f"OOB MLAG peer-link {n}",
             }
         )
     return cables
 
 
 def all_cables(seed: dict) -> list[dict]:
-    return build_fabric_cables(seed) + build_leaf_spine_cables(seed) + build_oob_cables(seed)
+    cursor = _fresh_cursor()
+    return (
+        build_fabric_cables(seed)
+        + build_leaf_spine_cables(seed)
+        + build_oob_cables(seed, cursor)
+        + build_mgmt_cables(seed, cursor)
+        + build_switch_mgmt_cables(seed, cursor)
+        + build_oob_peer_cables(seed)
+    )

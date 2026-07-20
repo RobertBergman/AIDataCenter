@@ -1,0 +1,62 @@
+# AuthN/Z + quotas at the gateway (SPEC §8: Authentication/Authorization).
+#
+# API keys are minted per user/project into Vault (secret/inference/api-keys,
+# one entry per key: "<key-id>: <secret>") and land here as a Secret via ESO.
+# Clients send the key in `x-api-key` (OpenAI SDK: default_headers). Per-key
+# rate limits use the Envoy global rate-limit service (redis-backed).
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: inference-api-keys
+  namespace: inference
+spec:
+  refreshInterval: 5m            # key revocation propagates within 5 min
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: inference-api-keys
+  dataFrom:
+    - extract:
+        key: secret/inference/api-keys
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: inference-api-key-auth
+  namespace: inference
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gw
+  apiKeyAuth:
+    credentialRefs:
+      - name: inference-api-keys
+    extractFrom:
+      - headers:
+          - x-api-key
+---
+# Per-key request quota. Token-based metering (input/output tokens per key)
+# is the phase-next upgrade via Envoy AI Gateway — docs/serving.md §6.3.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: inference-rate-limits
+  namespace: inference
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gw
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        - clientSelectors:
+            - headers:
+                - name: x-api-key
+                  type: Distinct
+          limit:
+            requests: 120
+            unit: Minute

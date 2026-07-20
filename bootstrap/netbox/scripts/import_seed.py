@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nb_lib import (  # noqa: E402
     all_cables,
     ensure,
+    ensure_primary_mac,
     expand_gpu_interfaces,
     expand_switch_interfaces,
     load_seed,
@@ -49,21 +50,14 @@ def cf_defs(nb):
         },
     ]
     for f in fields:
-        # NetBox 4.x uses object_types; older used content_types
+        # NetBox 4.x custom fields attach via object_types (content_types was removed).
         existing = nb.extras.custom_fields.get(name=f["name"])
         if existing:
             continue
         try:
             nb.extras.custom_fields.create(f)
         except Exception as e:
-            # fallback content_types for older
-            fb = dict(f)
-            fb.pop("object_types", None)
-            fb["content_types"] = ["dcim.device"]
-            try:
-                nb.extras.custom_fields.create(fb)
-            except Exception:
-                print(f"  warn custom field {f['name']}: {e}")
+            print(f"  warn custom field {f['name']}: {e}")
 
 
 def main() -> int:
@@ -151,13 +145,26 @@ def main() -> int:
         )
 
     print("==> VLANs")
+    # Direct VLAN→site assignment is deprecated since NetBox 4.4; scope a
+    # VLAN group to the site and attach VLANs to the group instead.
+    vlan_group = ensure(
+        nb.ipam.vlan_groups,
+        {"slug": f"{seed['site']['slug']}-vlans"},
+        {
+            "name": f"{seed['site']['name']} VLANs",
+            "slug": f"{seed['site']['slug']}-vlans",
+            "scope_type": "dcim.site",
+            "scope_id": site.id,
+            "tenant": tenant.id,
+        },
+    )
     vlans = {}
     for v in seed["vlans"]:
         vlans[v["slug"]] = ensure(
             nb.ipam.vlans,
-            {"site_id": site.id, "vid": v["vid"]},
+            {"group_id": vlan_group.id, "vid": v["vid"]},
             {
-                "site": site.id,
+                "group": vlan_group.id,
                 "vid": v["vid"],
                 "name": v["name"],
                 "slug": v["slug"],
@@ -186,7 +193,9 @@ def main() -> int:
             "prefix": p["prefix"],
             "status": p.get("status", "active"),
             "description": p.get("description", ""),
-            "site": site.id,
+            # NetBox 4.2+ scopes prefixes generically (site FK removed).
+            "scope_type": "dcim.site",
+            "scope_id": site.id,
             "tenant": tenant.id,
             "is_pool": True,
         }
@@ -245,13 +254,14 @@ def main() -> int:
                 "description": iface.get("description", ""),
                 "label": iface.get("label", ""),
             }
-            if iface.get("mac"):
-                ipayload["mac_address"] = iface["mac"].upper()
-            ensure(
+            iface_rec = ensure(
                 nb.dcim.interfaces,
                 {"device_id": dev.id, "name": iface["name"]},
                 ipayload,
             )
+            # MACs are discrete objects since NetBox 4.2; assign + set primary.
+            if iface.get("mac"):
+                ensure_primary_mac(nb, iface_rec, iface["mac"], iface.get("description", ""))
 
         def assign_ip(cidr: str | None, ifname: str, dns: str | None = None):
             if not cidr:

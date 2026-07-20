@@ -1,0 +1,64 @@
+# Stage Kimi K2 Thinking weights onto the hot model FS (SPEC §6.8 layout).
+#
+# Immutable version dir + CHECKSUMS + atomic `current` symlink flip — the
+# InferenceService only ever reads /models/kimi-k2-thinking/current.
+# ~594 GB (INT4 QAT, 62 shards); at the §6.4 ≥40 GB/s hot-tier target this
+# stages in <30 min. Re-run with a new MODEL_REVISION to roll a new version;
+# roll back by re-pointing `current` (never delete a version in place).
+#
+# Egress: workers have no direct internet — the pull goes through Harbor's
+# HF proxy cache (registry.ai.local) / the BOOT-rack egress proxy.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kimi-k2-thinking-download
+  namespace: inference
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: model-download
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: download
+          image: registry.ai.local/library/huggingface-cli:0.34.0
+          env:
+            - name: MODEL_ID
+              value: moonshotai/Kimi-K2-Thinking
+            - name: MODEL_REVISION
+              value: v2026-07-19          # bump per promote
+            - name: HF_HUB_ENABLE_HF_TRANSFER
+              value: "1"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-credentials
+                  key: HF_TOKEN
+          command: ["/bin/bash", "-ceu"]
+          args:
+            - |
+              dest="/models/kimi-k2-thinking/${MODEL_REVISION}"
+              if [ -f "${dest}/CHECKSUMS" ]; then
+                echo "already staged: ${dest}"; exit 0
+              fi
+              mkdir -p "${dest}.partial"
+              hf download "${MODEL_ID}" --local-dir "${dest}.partial"
+              (cd "${dest}.partial" && find . -type f ! -name CHECKSUMS \
+                 -exec sha256sum {} + | sort -k2 > CHECKSUMS)
+              mv "${dest}.partial" "${dest}"
+              ln -sfn "${MODEL_REVISION}" /models/kimi-k2-thinking/current.new
+              mv -T /models/kimi-k2-thinking/current.new /models/kimi-k2-thinking/current
+              echo "promoted kimi-k2-thinking -> ${MODEL_REVISION}"
+          resources:
+            requests:
+              cpu: "4"
+              memory: 8Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: models-rwx

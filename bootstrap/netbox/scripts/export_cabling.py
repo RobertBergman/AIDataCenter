@@ -73,6 +73,8 @@ def cables_offline(seed) -> list[dict]:
 
 def classify(row: dict) -> str:
     a, b = row["a_iface"], row["b_iface"]
+    if {row["a_device"], row["b_device"]} == {"oob-sw1", "oob-sw2"}:
+        return "oob-peer"
     if a.startswith("rail") or b.startswith("rail"):
         return "fabric-host-leaf"
     if "Ethernet" in a and "Ethernet" in b and (
@@ -81,6 +83,10 @@ def classify(row: dict) -> str:
         return "fabric-leaf-spine"
     if a == "bmc" or b == "bmc":
         return "oob-bmc"
+    if a == "mgmt0" or b == "mgmt0":
+        return "oob-mgmt0"
+    if a == "Management1" or b == "Management1":
+        return "oob-switch-ma1"
     return "other"
 
 
@@ -105,6 +111,9 @@ def render_md(rows: list[dict], source: str) -> str:
     fabric = by.get("fabric-host-leaf", [])
     ls = by.get("fabric-leaf-spine", [])
     oob = by.get("oob-bmc", [])
+    mgmt = by.get("oob-mgmt0", [])
+    ma1 = by.get("oob-switch-ma1", [])
+    peer = by.get("oob-peer", [])
 
     return f"""# Cabling Guide — 64× B200 AI Cluster
 
@@ -142,7 +151,10 @@ Do not maintain this file by hand. Update NetBox (or `bootstrap/netbox/seed/site
 | ----- | -----: |
 | Host ↔ rail leaf (8 workers × 8 rails) | **{len(fabric)}** |
 | Rail leaf ↔ spine | **{len(ls)}** |
-| BMC ↔ OOB | **{len(oob)}** |
+| BMC ↔ OOB (VLAN 20) | **{len(oob)}** |
+| Server mgmt0 ↔ OOB (VLAN 10) | **{len(mgmt)}** |
+| Switch Ma1 ↔ OOB (VLAN 20, ZTP) | **{len(ma1)}** |
+| OOB MLAG peer-link | **{len(peer)}** |
 | **Total** | **{len(rows)}** |
 
 ---
@@ -172,14 +184,30 @@ Default: leaf ports **Ethernet17–24** uplinks; spine ports blocked by rail (4 
 
 ---
 
-## 5. OOB (BMC → 7010TX-48)
+## 5. OOB / mgmt plane (7010TX-48)
 
 | Rack | OOB switch |
 | ---- | ---------- |
 | GPU-1, BOOT | oob-sw1 |
 | GPU-2, STOR | oob-sw2 |
 
+Port allocation per OOB switch, in order: **BMC (VLAN 20) → server mgmt0 (VLAN 10) → switch Ma1 (VLAN 20)**; SFP28 49–50 = MLAG peer-link. Full design: `docs/network.md` §4.
+
+### 5.1 BMC (VLAN 20)
+
 {table(oob) if oob else "_No cables_"}
+
+### 5.2 Server mgmt0 — OS/PXE (VLAN 10)
+
+{table(mgmt) if mgmt else "_No cables_"}
+
+### 5.3 Switch Management1 — ZTP (VLAN 20)
+
+{table(ma1) if ma1 else "_No cables_"}
+
+### 5.4 OOB MLAG peer-link
+
+{table(peer) if peer else "_No cables_"}
 
 ---
 
@@ -190,6 +218,9 @@ Default: leaf ports **Ethernet17–24** uplinks; spine ports blocked by rail (4 
 | `R{{rail}}-W{{nn}}` | Host fabric |
 | `L{{rail}}S{{spine}}-U{{n}}` | Leaf–spine uplink |
 | `OOB-{{device}}` | BMC |
+| `MGMT-{{device}}` | Server mgmt0 (OS/PXE) |
+| `MA1-{{device}}` | Switch Management1 (ZTP) |
+| `OOB-PEER-{{n}}` | OOB MLAG peer-link |
 
 Print both ends; enter QR/barcode into NetBox cable `label` field on install (status → connected).
 
@@ -209,6 +240,7 @@ Print both ends; enter QR/barcode into NetBox cable `label` field on install (st
 | Version | Date | Notes |
 | ------- | ---- | ----- |
 | 0.1 | 2026-07-18 | Initial export format |
+| 0.2 | 2026-07-19 | + mgmt0 (VLAN 10), switch Ma1 (ZTP), OOB MLAG peer-link |
 """
 
 

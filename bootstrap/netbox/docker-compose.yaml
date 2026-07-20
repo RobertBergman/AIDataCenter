@@ -30,7 +30,7 @@ services:
       retries: 5
 
   netbox:
-    image: docker.io/netboxcommunity/netbox:v4.2.6
+    image: docker.io/netboxcommunity/netbox:v4.6.5
     restart: unless-stopped
     depends_on:
       postgres:
@@ -47,6 +47,8 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redischangeme}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      # NetBox 4.5+ v2 API tokens (nbt_…) require at least one HMAC pepper.
+      API_TOKEN_PEPPER_1: ${API_TOKEN_PEPPER_1:?set API_TOKEN_PEPPER_1 in .env}
       SUPERUSER_NAME: ${SUPERUSER_NAME:-admin}
       SUPERUSER_EMAIL: ${SUPERUSER_EMAIL:-netbox@ai.local}
       SUPERUSER_PASSWORD: ${SUPERUSER_PASSWORD:-adminchangeme}
@@ -65,7 +67,7 @@ services:
       start_period: 120s
 
   netbox-worker:
-    image: docker.io/netboxcommunity/netbox:v4.2.6
+    image: docker.io/netboxcommunity/netbox:v4.6.5
     restart: unless-stopped
     depends_on:
       - netbox
@@ -80,6 +82,7 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redischangeme}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      API_TOKEN_PEPPER_1: ${API_TOKEN_PEPPER_1:?set API_TOKEN_PEPPER_1 in .env}
       ALLOWED_HOSTS: "*"
 
 volumes:

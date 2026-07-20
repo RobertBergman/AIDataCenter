@@ -2,7 +2,7 @@
 
 Companion to [SPEC.md](../SPEC.md) §2A (BOOT rack), §7 (Kubernetes), §6.7 (archive bus), §11 (observability).
 
-**Code:** [bootstrap/](../bootstrap/)
+**Code:** [bootstrap/](../bootstrap/) · **Interactive walkthrough:** [demo/](../demo/README.md) (browser simulator of this exact process)
 
 ---
 
@@ -180,6 +180,7 @@ Redpanda topics (`inference.records`, DLQ, tombstones) buffer async capture befo
 
 ## 11. Next documents
 
+0. [docs/build-guide.md](build-guide.md) — **physical build first** (rack, power, cable, switch/server bring-up, burn-in)
 1. `docs/network.md` — EOS RoCE, EVPN, rail SR-IOV (consume NetBox IPAM)  
 2. `docs/storage.md` — CSI for `models-rwx` + RGW lake  
 3. `docs/k8s.md` — day-2 ops, upgrades, multi-tenancy  

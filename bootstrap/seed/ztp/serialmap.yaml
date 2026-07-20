@@ -1,0 +1,19 @@
+# serial → hostname map for ZTP config rendering (render.py).
+# Fill in REAL serial numbers at staging (build-guide §5: capture serial + Ma1
+# MAC into NetBox), then re-run:  python3 bootstrap/seed/ztp/render.py -o <out>
+#
+# ztp.py on each switch fetches http://seed01/ztp/configs/<its-serial>.
+# Placeholders below work for the offline/demo flow only.
+
+SERIAL-OOB-SW1: oob-sw1
+SERIAL-OOB-SW2: oob-sw2
+SERIAL-SPINE1: spine1
+SERIAL-SPINE2: spine2
+SERIAL-LEAF-RAIL0: leaf-rail0
+SERIAL-LEAF-RAIL1: leaf-rail1
+SERIAL-LEAF-RAIL2: leaf-rail2
+SERIAL-LEAF-RAIL3: leaf-rail3
+SERIAL-LEAF-RAIL4: leaf-rail4
+SERIAL-LEAF-RAIL5: leaf-rail5
+SERIAL-LEAF-RAIL6: leaf-rail6
+SERIAL-LEAF-RAIL7: leaf-rail7

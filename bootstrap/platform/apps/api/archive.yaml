@@ -1,0 +1,113 @@
+# Inference capture → 1-year archive (SPEC §6.7 pipeline, gateway variant).
+#
+# Capture happens ONCE at the gateway (not per TP shard): the archive-tap
+# receives Envoy ALS access-log streams plus request/response bodies
+# (ext-proc buffer mode for non-streaming; SSE reassembly for streams),
+# builds InferenceRecords (schema v1, SPEC §6.4 field list) and produces to
+# Redpanda `inference.records`. Async by construction — a tap outage never
+# blocks the token stream (SPEC §6.4: TTFT impact = none; gap alarms fire).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archive-tap
+  namespace: inference
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: archive-tap
+  template:
+    metadata:
+      labels:
+        app: archive-tap
+    spec:
+      containers:
+        - name: tap
+          image: registry.ai.local/platform/archive-tap:0.1.0
+          ports:
+            - containerPort: 9000    # ALS gRPC
+              name: als
+          env:
+            - name: KAFKA_BROKERS
+              value: redpanda.redpanda.svc:9093
+            - name: KAFKA_TOPIC
+              value: inference.records
+            - name: SCHEMA_VERSION
+              value: "1"
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+          volumeMounts:
+            - name: spool
+              mountPath: /var/spool/archive   # NVMe ring buffer if bus is down
+      volumes:
+        - name: spool
+          persistentVolumeClaim:
+            claimName: inference-archive-scratch
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: archive-tap
+  namespace: inference
+spec:
+  selector:
+    app: archive-tap
+  ports:
+    - name: als
+      port: 9000
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: archive-s3-credentials
+  namespace: inference
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: archive-s3-credentials
+  data:
+    - secretKey: AWS_ACCESS_KEY_ID
+      remoteRef: { key: secret/inference/archive-s3, property: access_key }
+    - secretKey: AWS_SECRET_ACCESS_KEY
+      remoteRef: { key: secret/inference/archive-s3, property: secret_key }
+---
+# Hourly compactor: inference.records → parquet(zstd) → object lake
+# s3://inference-archive/year=/month=/day=/model=/ (SPEC §6.8 layout,
+# 365d lifecycle on the bucket). p99 archive lag target ≤ 60 s is met by the
+# bus, not this job — the compactor only bounds object count/size.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: archive-compactor
+  namespace: inference
+spec:
+  schedule: "10 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: archive-compactor
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: compactor
+              image: registry.ai.local/platform/archive-compactor:0.1.0
+              env:
+                - name: KAFKA_BROKERS
+                  value: redpanda.redpanda.svc:9093
+                - name: KAFKA_TOPIC
+                  value: inference.records
+                - name: S3_ENDPOINT
+                  value: http://s3.stor.ai.local
+                - name: S3_BUCKET
+                  value: inference-archive
+              envFrom:
+                - secretRef:
+                    name: archive-s3-credentials
+              resources:
+                requests: { cpu: "2", memory: 4Gi }

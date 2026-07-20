@@ -1,7 +1,7 @@
 # Cabling Guide — 64× B200 AI Cluster
 
 > **Source of truth:** NetBox (`seed/site.yaml (offline)`)  
-> **Generated:** 2026-07-18 19:10 UTC  
+> **Generated:** 2026-07-20 02:22 UTC  
 > Regenerate: `python3 bootstrap/netbox/scripts/export_cabling.py`
 
 Do not maintain this file by hand. Update NetBox (or `bootstrap/netbox/seed/site.yaml` pre-go-live), then re-export.
@@ -34,8 +34,11 @@ Do not maintain this file by hand. Update NetBox (or `bootstrap/netbox/seed/site
 | ----- | -----: |
 | Host ↔ rail leaf (8 workers × 8 rails) | **64** |
 | Rail leaf ↔ spine | **64** |
-| BMC ↔ OOB | **14** |
-| **Total** | **142** |
+| BMC ↔ OOB (VLAN 20) | **14** |
+| Server mgmt0 ↔ OOB (VLAN 10) | **15** |
+| Switch Ma1 ↔ OOB (VLAN 20, ZTP) | **10** |
+| OOB MLAG peer-link | **2** |
+| **Total** | **169** |
 
 ---
 
@@ -194,12 +197,16 @@ Default: leaf ports **Ethernet17–24** uplinks; spine ports blocked by rail (4 
 
 ---
 
-## 5. OOB (BMC → 7010TX-48)
+## 5. OOB / mgmt plane (7010TX-48)
 
 | Rack | OOB switch |
 | ---- | ---------- |
 | GPU-1, BOOT | oob-sw1 |
 | GPU-2, STOR | oob-sw2 |
+
+Port allocation per OOB switch, in order: **BMC (VLAN 20) → server mgmt0 (VLAN 10) → switch Ma1 (VLAN 20)**; SFP28 49–50 = MLAG peer-link. Full design: `docs/network.md` §4.
+
+### 5.1 BMC (VLAN 20)
 
 | Label | A device | A port | B device | B port | Type | Status |
 | ----- | -------- | ------ | -------- | ------ | ---- | ------ |
@@ -218,6 +225,48 @@ Default: leaf ports **Ethernet17–24** uplinks; spine ports blocked by rail (4 
 | `OOB-worker07` | worker07 | `bmc` | oob-sw2 | `Ethernet3` | cat6 | planned |
 | `OOB-worker08` | worker08 | `bmc` | oob-sw2 | `Ethernet4` | cat6 | planned |
 
+### 5.2 Server mgmt0 — OS/PXE (VLAN 10)
+
+| Label | A device | A port | B device | B port | Type | Status |
+| ----- | -------- | ------ | -------- | ------ | ---- | ------ |
+| `MGMT-cp01` | cp01 | `mgmt0` | oob-sw1 | `Ethernet12` | cat6 | planned |
+| `MGMT-cp02` | cp02 | `mgmt0` | oob-sw1 | `Ethernet13` | cat6 | planned |
+| `MGMT-cp03` | cp03 | `mgmt0` | oob-sw1 | `Ethernet14` | cat6 | planned |
+| `MGMT-seed01` | seed01 | `mgmt0` | oob-sw1 | `Ethernet11` | cat6 | planned |
+| `MGMT-util01` | util01 | `mgmt0` | oob-sw1 | `Ethernet15` | cat6 | planned |
+| `MGMT-util02` | util02 | `mgmt0` | oob-sw1 | `Ethernet16` | cat6 | planned |
+| `MGMT-util03` | util03 | `mgmt0` | oob-sw1 | `Ethernet17` | cat6 | planned |
+| `MGMT-worker01` | worker01 | `mgmt0` | oob-sw1 | `Ethernet18` | cat6 | planned |
+| `MGMT-worker02` | worker02 | `mgmt0` | oob-sw1 | `Ethernet19` | cat6 | planned |
+| `MGMT-worker03` | worker03 | `mgmt0` | oob-sw1 | `Ethernet20` | cat6 | planned |
+| `MGMT-worker04` | worker04 | `mgmt0` | oob-sw1 | `Ethernet21` | cat6 | planned |
+| `MGMT-worker05` | worker05 | `mgmt0` | oob-sw2 | `Ethernet5` | cat6 | planned |
+| `MGMT-worker06` | worker06 | `mgmt0` | oob-sw2 | `Ethernet6` | cat6 | planned |
+| `MGMT-worker07` | worker07 | `mgmt0` | oob-sw2 | `Ethernet7` | cat6 | planned |
+| `MGMT-worker08` | worker08 | `mgmt0` | oob-sw2 | `Ethernet8` | cat6 | planned |
+
+### 5.3 Switch Management1 — ZTP (VLAN 20)
+
+| Label | A device | A port | B device | B port | Type | Status |
+| ----- | -------- | ------ | -------- | ------ | ---- | ------ |
+| `MA1-leaf-rail0` | leaf-rail0 | `Management1` | oob-sw1 | `Ethernet24` | cat6 | planned |
+| `MA1-leaf-rail1` | leaf-rail1 | `Management1` | oob-sw1 | `Ethernet25` | cat6 | planned |
+| `MA1-leaf-rail2` | leaf-rail2 | `Management1` | oob-sw1 | `Ethernet26` | cat6 | planned |
+| `MA1-leaf-rail3` | leaf-rail3 | `Management1` | oob-sw1 | `Ethernet27` | cat6 | planned |
+| `MA1-leaf-rail4` | leaf-rail4 | `Management1` | oob-sw2 | `Ethernet9` | cat6 | planned |
+| `MA1-leaf-rail5` | leaf-rail5 | `Management1` | oob-sw2 | `Ethernet10` | cat6 | planned |
+| `MA1-leaf-rail6` | leaf-rail6 | `Management1` | oob-sw2 | `Ethernet11` | cat6 | planned |
+| `MA1-leaf-rail7` | leaf-rail7 | `Management1` | oob-sw2 | `Ethernet12` | cat6 | planned |
+| `MA1-spine1` | spine1 | `Management1` | oob-sw1 | `Ethernet22` | cat6 | planned |
+| `MA1-spine2` | spine2 | `Management1` | oob-sw1 | `Ethernet23` | cat6 | planned |
+
+### 5.4 OOB MLAG peer-link
+
+| Label | A device | A port | B device | B port | Type | Status |
+| ----- | -------- | ------ | -------- | ------ | ---- | ------ |
+| `OOB-PEER-1` | oob-sw1 | `Ethernet49` | oob-sw2 | `Ethernet49` | dac-25g-5m | planned |
+| `OOB-PEER-2` | oob-sw1 | `Ethernet50` | oob-sw2 | `Ethernet50` | dac-25g-5m | planned |
+
 ---
 
 ## 6. Labeling convention
@@ -227,6 +276,9 @@ Default: leaf ports **Ethernet17–24** uplinks; spine ports blocked by rail (4 
 | `R{rail}-W{nn}` | Host fabric |
 | `L{rail}S{spine}-U{n}` | Leaf–spine uplink |
 | `OOB-{device}` | BMC |
+| `MGMT-{device}` | Server mgmt0 (OS/PXE) |
+| `MA1-{device}` | Switch Management1 (ZTP) |
+| `OOB-PEER-{n}` | OOB MLAG peer-link |
 
 Print both ends; enter QR/barcode into NetBox cable `label` field on install (status → connected).
 
@@ -246,3 +298,4 @@ Print both ends; enter QR/barcode into NetBox cable `label` field on install (st
 | Version | Date | Notes |
 | ------- | ---- | ----- |
 | 0.1 | 2026-07-18 | Initial export format |
+| 0.2 | 2026-07-19 | + mgmt0 (VLAN 10), switch Ma1 (ZTP), OOB MLAG peer-link |

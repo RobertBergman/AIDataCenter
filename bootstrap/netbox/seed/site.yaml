@@ -26,6 +26,8 @@ cluster:
 manufacturer:
   - name: NVIDIA
     slug: nvidia
+  - name: Dell
+    slug: dell
   - name: Arista
     slug: arista
   - name: Generic
@@ -47,12 +49,12 @@ device_types:
     slug: mgmt-server-1u
     u_height: 1
     is_full_depth: true
-  - manufacturer: NVIDIA
-    model: HGX B200 8-GPU
-    slug: hgx-b200-8gpu
+  - manufacturer: Dell
+    model: PowerEdge XE9680
+    slug: poweredge-xe9680
     u_height: 6
     is_full_depth: true
-    # comments: 8× B200 + 8× 400G NIC
+    # comments: HGX B200 8× SXM + 8× 400G NIC, air-cooled
   - manufacturer: Arista
     model: DCS-7060DX5-32
     slug: dcs-7060dx5-32
@@ -102,7 +104,8 @@ vlans:
   - { vid: 10, name: mgmt, slug: mgmt, description: "Kubernetes/OS management" }
   - { vid: 20, name: oob, slug: oob, description: "BMC / switch Management1 via 7010TX-48" }
   - { vid: 100, name: fabric-underlay, slug: fabric-underlay, description: "RoCE rail underlay (informational)" }
-  - { vid: 200, name: storage, slug: storage, description: "Storage VRF overlay/VLAN" }
+  - { vid: 50, name: edge-access, slug: edge-access, description: "Edge/API access (VRF edge, L2VNI 10050) — worker tagged subif on rail0/7 NICs" }
+  - { vid: 200, name: storage, slug: storage, description: "Storage access (VRF storage, L2VNI 10200) — worker tagged subif on rail0/7 NICs" }
 
 # IPAM prefixes
 ipam:
@@ -112,7 +115,17 @@ ipam:
     - { prefix: "10.10.0.0/24", vlan: mgmt, status: active, description: "Mgmt / bootstrap", role: management }
     - { prefix: "10.20.0.0/24", vlan: oob, status: active, description: "OOB BMC", role: oob }
     - { prefix: "10.30.0.0/16", vlan: fabric-underlay, status: container, description: "Fabric underlay container", role: fabric }
-    - { prefix: "10.40.0.0/16", vlan: storage, status: active, description: "Storage data", role: storage }
+    - { prefix: "10.30.0.0/24", status: active, description: "Fabric loopbacks /32 (BGP router-ids): spines .1-.2, leaves .11-.18", role: fabric }
+    - { prefix: "10.30.0.0/19", status: container, description: "Leaf-spine p2p /31 pool: leaf-rail{i} uses 10.30.{2i+1}.0/29 (spine1) + 10.30.{2i+2}.0/29 (spine2)", role: fabric }
+    - { prefix: "10.30.64.0/19", status: container, description: "Host rail subnets: rail{i} = 10.30.{64+i}.0/24 (leaf .1, worker0N .1N)", role: fabric }
+    - { prefix: "10.30.32.0/24", status: active, description: "VTEP loopbacks (Loopback1): spines .1-.2, leaves .11-.18 (EVPN/VXLAN, docs/overlay.md)", role: fabric }
+    - { prefix: "10.40.0.0/16", status: container, description: "Storage data (VRF storage, L3VNI 50200)", role: storage }
+    - { prefix: "10.40.0.0/24", status: active, description: "Storage p2p /31 (vrf storage): leaf-rail0 Eth25-28 .0-.7, leaf-rail7 Eth25-28 .8-.15", role: storage }
+    - { prefix: "10.40.64.0/24", vlan: storage, status: active, description: "Storage access VLAN 200: VARP gw .1, leaf-rail{i} .{2+i}, worker0N .1N (tagged subif)", role: storage }
+    - { prefix: "10.50.0.0/16", status: container, description: "Edge / API services (VRF edge, L3VNI 50050)", role: edge }
+    - { prefix: "10.50.0.0/24", status: active, description: "LoadBalancer VIP pool (MetalLB BGP): inference gateway .10", role: edge }
+    - { prefix: "10.50.64.0/24", vlan: edge-access, status: active, description: "Edge access VLAN 50: VARP gw .1, leaf-rail{i} .{2+i}, worker0N .1N (tagged subif); MetalLB peers leaf .2/.9", role: edge }
+    - { prefix: "10.50.255.0/29", status: active, description: "Border p2p /31 (vrf edge): spine1 Eth33 .0/31, spine2 Eth33 .2/31 → campus firewall AS 65500", role: edge }
     - { prefix: "10.96.0.0/12", status: container, description: "Kubernetes services (documented)", role: k8s-service }
     - { prefix: "10.244.0.0/16", status: container, description: "Kubernetes pods (documented)", role: k8s-pod }
   # Reserved / assigned IPs (expanded devices also allocate primary+bmc)
@@ -122,6 +135,22 @@ ipam:
     - { address: "10.10.0.10/24", dns_name: "seed01.ai.local", description: "seed01 primary", device: seed01, interface: mgmt0 }
     - { address: "10.10.0.20/24", dns_name: "api.ai.local", description: "K8s API VIP", role: vip }
     - { address: "10.10.0.31/24", dns_name: "registry.ai.local", description: "Harbor VIP/primary", role: vip }
+    - { address: "10.40.64.1/24", dns_name: "gw-storage.ai.local", description: "Storage access VARP gateway (VRF storage)", role: anycast }
+    - { address: "10.50.64.1/24", dns_name: "gw-edge.ai.local", description: "Edge access VARP gateway (VRF edge)", role: anycast }
+    - { address: "10.50.0.10/24", dns_name: "inference.ai.local", description: "Inference API gateway VIP (Envoy, MetalLB)", role: vip }
+    # Switch management (VLAN 20) — ZTP reservations keyed by Management1 MAC
+    - { address: "10.20.0.11/24", dns_name: "oob-sw1.ai.local", description: "oob-sw1 SVI20 (VARP real)", device: oob-sw1, interface: Management1 }
+    - { address: "10.20.0.12/24", dns_name: "oob-sw2.ai.local", description: "oob-sw2 SVI20 (VARP real)", device: oob-sw2, interface: Management1 }
+    - { address: "10.20.0.13/24", dns_name: "spine1.ai.local", description: "spine1 Management1 (ZTP)", device: spine1, interface: Management1 }
+    - { address: "10.20.0.14/24", dns_name: "spine2.ai.local", description: "spine2 Management1 (ZTP)", device: spine2, interface: Management1 }
+    - { address: "10.20.0.41/24", dns_name: "leaf-rail0.ai.local", description: "leaf-rail0 Management1 (ZTP)", device: leaf-rail0, interface: Management1 }
+    - { address: "10.20.0.42/24", dns_name: "leaf-rail1.ai.local", description: "leaf-rail1 Management1 (ZTP)", device: leaf-rail1, interface: Management1 }
+    - { address: "10.20.0.43/24", dns_name: "leaf-rail2.ai.local", description: "leaf-rail2 Management1 (ZTP)", device: leaf-rail2, interface: Management1 }
+    - { address: "10.20.0.44/24", dns_name: "leaf-rail3.ai.local", description: "leaf-rail3 Management1 (ZTP)", device: leaf-rail3, interface: Management1 }
+    - { address: "10.20.0.45/24", dns_name: "leaf-rail4.ai.local", description: "leaf-rail4 Management1 (ZTP)", device: leaf-rail4, interface: Management1 }
+    - { address: "10.20.0.46/24", dns_name: "leaf-rail5.ai.local", description: "leaf-rail5 Management1 (ZTP)", device: leaf-rail5, interface: Management1 }
+    - { address: "10.20.0.47/24", dns_name: "leaf-rail6.ai.local", description: "leaf-rail6 Management1 (ZTP)", device: leaf-rail6, interface: Management1 }
+    - { address: "10.20.0.48/24", dns_name: "leaf-rail7.ai.local", description: "leaf-rail7 Management1 (ZTP)", device: leaf-rail7, interface: Management1 }
 
 # Device inventory — MACs/serials are placeholders; replace in NetBox after receive
 devices:
@@ -234,6 +263,7 @@ devices:
     position: 20
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.13/24
     custom_fields: { k8s_role: "", gpu_count: 0 }
     # interfaces Ethernet1-64 generated
 
@@ -244,12 +274,13 @@ devices:
     position: 18
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.14/24
     custom_fields: { k8s_role: "", gpu_count: 0 }
 
   # GPU racks — workers
   - name: worker01
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-1
     position: 30
     platform: ubuntu-2404
@@ -261,7 +292,7 @@ devices:
 
   - name: worker02
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-1
     position: 24
     platform: ubuntu-2404
@@ -272,7 +303,7 @@ devices:
 
   - name: worker03
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-1
     position: 18
     platform: ubuntu-2404
@@ -283,7 +314,7 @@ devices:
 
   - name: worker04
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-1
     position: 12
     platform: ubuntu-2404
@@ -294,7 +325,7 @@ devices:
 
   - name: worker05
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-2
     position: 30
     platform: ubuntu-2404
@@ -305,7 +336,7 @@ devices:
 
   - name: worker06
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-2
     position: 24
     platform: ubuntu-2404
@@ -316,7 +347,7 @@ devices:
 
   - name: worker07
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-2
     position: 18
     platform: ubuntu-2404
@@ -327,7 +358,7 @@ devices:
 
   - name: worker08
     role: gpu-worker
-    device_type: hgx-b200-8gpu
+    device_type: poweredge-xe9680
     rack: GPU-2
     position: 12
     platform: ubuntu-2404
@@ -344,6 +375,7 @@ devices:
     position: 42
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.41/24
     custom_fields: { rail_index: 0 }
   - name: leaf-rail1
     role: rail-leaf
@@ -352,6 +384,7 @@ devices:
     position: 41
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.42/24
     custom_fields: { rail_index: 1 }
   - name: leaf-rail2
     role: rail-leaf
@@ -360,6 +393,7 @@ devices:
     position: 40
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.43/24
     custom_fields: { rail_index: 2 }
   - name: leaf-rail3
     role: rail-leaf
@@ -368,6 +402,7 @@ devices:
     position: 39
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.44/24
     custom_fields: { rail_index: 3 }
   - name: leaf-rail4
     role: rail-leaf
@@ -376,6 +411,7 @@ devices:
     position: 42
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.45/24
     custom_fields: { rail_index: 4 }
   - name: leaf-rail5
     role: rail-leaf
@@ -384,6 +420,7 @@ devices:
     position: 41
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.46/24
     custom_fields: { rail_index: 5 }
   - name: leaf-rail6
     role: rail-leaf
@@ -392,6 +429,7 @@ devices:
     position: 40
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.47/24
     custom_fields: { rail_index: 6 }
   - name: leaf-rail7
     role: rail-leaf
@@ -400,6 +438,7 @@ devices:
     position: 39
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.48/24
     custom_fields: { rail_index: 7 }
 
   - name: oob-sw1
@@ -409,6 +448,7 @@ devices:
     position: 48
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.11/24
   - name: oob-sw2
     role: oob-switch
     device_type: dcs-7010tx-48
@@ -416,6 +456,7 @@ devices:
     position: 48
     platform: arista-eos
     status: planned
+    mgmt_ip: 10.20.0.12/24
 
 # Cabling tables — formulas applied by import_seed.py
 cabling_policy:
@@ -442,13 +483,31 @@ cabling_policy:
     color: "795548"
     label_template: "OOB-{device}"
   mgmt:
-    # Optional: mgmt0 to access switch — if not used, mgmt may be on fabric VRF
-    enabled: false
+    # Server mgmt0 (OS/PXE, VLAN 10) → rack OOB switch
+    enabled: true
+    media: cat6
+    length_m: 5
+    color: "795548"
+    label_template: "MGMT-{device}"
+  switch_mgmt:
+    # Fabric switch Management1 (VLAN 20, ZTP) → rack OOB switch
+    media: cat6
+    length_m: 5
+    color: "9e9e9e"
+    label_template: "MA1-{device}"
+  oob_peer:
+    # oob-sw1 <-> oob-sw2 MLAG peer-link (SFP28)
+    ports: [49, 50]
+    media: dac-25g-5m
+    length_m: 5
+    color: "673ab7"
+    label_template: "OOB-PEER-{n}"
 
 cable_types:
   - { name: "DAC 400G QSFP-DD 3m", slug: dac-qsfpdd-400g, length: 3, length_unit: m }
   - { name: "AOC 400G QSFP-DD 15m", slug: aoc-qsfpdd-400g, length: 15, length_unit: m }
   - { name: "Cat6 5m", slug: cat6, length: 5, length_unit: m }
+  - { name: "DAC 25G SFP28 5m", slug: dac-25g-5m, length: 5, length_unit: m }
 
 # Export mapping for bootstrap inventory
 export:

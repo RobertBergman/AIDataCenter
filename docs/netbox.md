@@ -34,10 +34,10 @@ On `seed01`:
 
 ```bash
 cd bootstrap/netbox
-cp env.example .env && $EDITOR .env
+cp env.example .env && $EDITOR .env   # SECRET_KEY + API_TOKEN_PEPPER_1 required
 docker compose up -d
 export NETBOX_URL=http://127.0.0.1:8081
-export NETBOX_TOKEN=$(bash scripts/create_token.sh)
+export NETBOX_TOKEN=$(bash scripts/create_token.sh)   # v2 token: nbt_<key>.<secret>
 pip install -r requirements.txt
 python3 scripts/import_seed.py
 bash ../scripts/netbox-sync.sh
@@ -51,15 +51,17 @@ bash bootstrap/scripts/netbox-sync.sh --offline
 
 Offline expands `seed/site.yaml` (same rail math as import).
 
+> **NetBox 4.6 notes:** API tokens are v2 (`nbt_…`, HMAC-signed; plaintext shown once at creation — `API_TOKEN_PEPPER_1` must be set). MACs are discrete `MACAddress` objects marked primary per interface. Prefixes use generic `scope` (site), VLANs live in a site-scoped VLAN group (direct site assignment deprecated).
+
 ---
 
 ## 2. Day-2 (production NetBox)
 
-Flux path: `bootstrap/platform/apps/netbox` (`platform-netbox` Kustomization).
+Flux path: `bootstrap/platform/apps/netbox` (`platform-netbox` Kustomization, chart 8.x / NetBox v4.6.5).
 
 After URL is `https://netbox.ai.local`:
 
-1. Create API token (Vault: `secret/netbox/api_token`).  
+1. Create API token (Vault: `secret/netbox/api_token`) — v2 format `nbt_<key>.<secret>`; the chart auto-generates signing peppers.  
 2. Re-run `import_seed.py` once **only if** the K8s instance is empty (or use DB dump from seed NetBox).  
 3. Point automation `NETBOX_URL` at cluster NetBox.  
 4. Decommission seed Docker NetBox after cutover.

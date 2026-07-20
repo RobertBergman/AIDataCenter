@@ -18,6 +18,9 @@ listen-address={{ seed_ip }}
 listen-address=127.0.0.1
 
 dhcp-range={{ dhcp_start }},{{ dhcp_end }},12h
+# OOB VLAN 20 — requests arrive relayed (giaddr 10.20.0.1 on oob-sw MLAG pair);
+# reservations only (see generated/dhcp-hosts.conf), no dynamic pool.
+dhcp-range=10.20.0.0,static,12h
 dhcp-option=option:router,{{ gateway }}
 dhcp-option=option:dns-server,{{ seed_ip }}
 dhcp-option=option:ntp-server,{{ seed_ip }}
@@ -29,6 +32,13 @@ dhcp-match=set:efi64,option:client-arch,11
 dhcp-boot=tag:!ipxe,tag:efi64,ipxe.efi
 dhcp-boot=tag:ipxe,http://{{ seed_ip }}/boot.ipxe
 dhcp-userclass=set:ipxe,iPXE
+
+# Arista ZTP — EOS fetches option 67 (bootfile) and runs it as a script.
+# tag:ztp = fabric switches with Ma1 reservations (generated/dhcp-hosts.conf).
+# catch-all = zero-day bench ZTP (e.g. oob-sw1 direct-attached to seed01,
+# no reservation yet). Non-PXE clients only; PXE/iPXE matched above wins.
+dhcp-boot=tag:ztp,http://{{ seed_ip }}/ztp/ztp.py
+dhcp-boot=tag:!ztp,tag:!efi64,tag:!ipxe,http://{{ seed_ip }}/ztp/ztp.py
 
 address=/seed01.{{ domain }}/{{ seed_ip }}
 address=/api.{{ domain }}/{{ cp_vip }}

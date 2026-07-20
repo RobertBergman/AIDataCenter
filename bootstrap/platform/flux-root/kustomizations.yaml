@@ -134,3 +134,40 @@ spec:
   prune: true
   wait: true
   timeout: 20m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform-models
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform-serving      # KServe CRDs
+    - name: platform-security     # ESO for HF token
+  sourceRef:
+    kind: GitRepository
+    name: ai-cluster
+  path: ./bootstrap/platform/apps/models
+  prune: true
+  wait: true
+  timeout: 30m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform-api
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform-core         # cert-manager for the gateway cert
+    - name: platform-security     # ESO for API keys / S3 creds
+    - name: platform-bus          # Redpanda for the archive tap
+  sourceRef:
+    kind: GitRepository
+    name: ai-cluster
+  path: ./bootstrap/platform/apps/api
+  prune: true
+  wait: true
+  timeout: 20m
