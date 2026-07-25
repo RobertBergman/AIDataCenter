@@ -1,0 +1,124 @@
+{
+  "uid": "aidc-bootstrap",
+  "title": "Seed Bootstrap & Fabric Health",
+  "tags": ["aidc", "ztp"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Devices provisioned / expected",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "aidc_ztp_devices_provisioned", "legendFormat": "provisioned", "refId": "A" },
+        { "expr": "aidc_ztp_devices_expected", "legendFormat": "expected", "refId": "B" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Unknown MACs on the OOB network",
+      "description": "A ZTP request from a MAC that is not in the source of truth. Should be zero.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{ "expr": "aidc_ztp_unknown_mac_requests", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Provisioning state by device",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "aidc_ztp_device_provisioned",
+          "legendFormat": "{{device}} ({{role}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rail MTU -- programmed vs intended",
+      "description": "A rail that came up at 1500 instead of 9216 fragments every RDMA transfer while every link stays green.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "aidc_rail_mtu",
+          "legendFormat": "{{node}} rail{{rail}} actual",
+          "refId": "A"
+        },
+        {
+          "expr": "aidc_rail_mtu_intended",
+          "legendFormat": "{{node}} rail{{rail}} intended",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rail throughput by leaf",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "rate(aidc_rail_tx_bytes[1m])",
+          "legendFormat": "{{node}} rail{{rail}} -> {{leaf}} tx",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(aidc_rail_rx_bytes[1m])",
+          "legendFormat": "{{node}} rail{{rail}} <- {{leaf}} rx",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU collective wait (simulated) -- the cost of a bad rail",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "aidc_gpu_collective_wait_seconds",
+          "legendFormat": "{{node}} gpu{{gpu}} (rail{{rail}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Syslog messages received per device",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "targets": [
+        {
+          "expr": "rate(aidc_syslog_messages_total[1m])",
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

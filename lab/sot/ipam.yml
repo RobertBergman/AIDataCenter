@@ -1,0 +1,54 @@
+# Source of Truth: address plan
+#
+# Rail subnets are the load-bearing part of a rail-optimised design: NIC k of every
+# GPU node lands on rail k, whose only gateway is leaf k. Same-rail traffic therefore
+# crosses exactly one leaf; cross-rail traffic must transit a spine. The verification
+# suite asserts exactly that hop count.
+
+oob_management:
+  prefix: 10.10.0.0/24
+  gateway: 10.10.0.1          # docker bridge gateway
+  seed: 10.10.0.10
+  # dnsmasq hands out this range to anything without a reservation; a device landing
+  # in here means its MAC is not in the SoT -- an "unknown device on the OOB" alarm.
+  dynamic_range:
+    start: 10.10.0.200
+    end: 10.10.0.250
+
+loopbacks:
+  spine_prefix: 10.0.0.0/24
+  leaf_prefix: 10.0.1.0/24
+
+# Point-to-point leaf<->spine underlay links, one /31 per link.
+# Convention: 10.1.<leaf_index>.<(spine_index-1)*2>/31, leaf takes .0, spine takes .1
+fabric_p2p:
+  supernet: 10.1.0.0/16
+  mask: 31
+
+# One L3 rail domain per rail. The leaf owns .1 and is the only default gateway
+# the GPU NIC on that rail ever sees.
+rails:
+  - rail: 0
+    leaf: leaf1
+    vlan: 100
+    prefix: 10.20.0.0/24
+    gateway: 10.20.0.1
+  - rail: 1
+    leaf: leaf2
+    vlan: 101
+    prefix: 10.21.0.0/24
+    gateway: 10.21.0.1
+  - rail: 2
+    leaf: leaf3
+    vlan: 102
+    prefix: 10.22.0.0/24
+    gateway: 10.22.0.1
+  - rail: 3
+    leaf: leaf4
+    vlan: 103
+    prefix: 10.23.0.0/24
+    gateway: 10.23.0.1
+
+# Host address within a rail subnet = 10 + node_index, so gpu01 is always .11 on
+# every rail it touches. Makes "which node is this" readable straight off a ping.
+rail_host_offset: 10

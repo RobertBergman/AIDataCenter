@@ -1,0 +1,106 @@
+# Source of Truth: device inventory
+#
+# This file is authored by humans and loaded into NetBox by seed/netbox-seeder.
+# The network is a *rendering* of this data -- nothing is hand-configured on a device.
+#
+# devid is a stable small integer used to derive deterministic MAC addresses so that
+# DHCP reservations and interface naming are reproducible across lab rebuilds.
+
+site:
+  name: lab-pod1
+  description: Scaled-down rail-optimised AI pod (4 rails, 4 GPU nodes)
+
+defaults:
+  switch_platform: x86_64-kvm_x86_64-r0
+  switch_hwsku: Force10-S6000
+  fabric_mtu: 9216
+  # sonic-vs maps the Nth container interface to front-panel port Ethernet(4*(N-1))
+  port_map_stride: 4
+
+devices:
+  # ---- spine tier ----------------------------------------------------------
+  - name: spine1
+    role: spine
+    devid: 1
+    asn: 65001
+    loopback: 10.0.0.1/32
+    mgmt_ip: 10.10.0.21/24
+    sonic_type: LeafRouter   # sonic 'type' for a t1 device
+    sonic_preset: t1
+
+  - name: spine2
+    role: spine
+    devid: 2
+    asn: 65002
+    loopback: 10.0.0.2/32
+    mgmt_ip: 10.10.0.22/24
+    sonic_type: LeafRouter
+    sonic_preset: t1
+
+  # ---- leaf tier: one leaf per rail ---------------------------------------
+  - name: leaf1
+    role: leaf
+    rail: 0
+    devid: 11
+    asn: 65101
+    loopback: 10.0.1.1/32
+    mgmt_ip: 10.10.0.31/24
+    sonic_type: ToRRouter
+    sonic_preset: t0
+
+  - name: leaf2
+    role: leaf
+    rail: 1
+    devid: 12
+    asn: 65102
+    loopback: 10.0.1.2/32
+    mgmt_ip: 10.10.0.32/24
+    sonic_type: ToRRouter
+    sonic_preset: t0
+
+  - name: leaf3
+    role: leaf
+    rail: 2
+    devid: 13
+    asn: 65103
+    loopback: 10.0.1.3/32
+    mgmt_ip: 10.10.0.33/24
+    sonic_type: ToRRouter
+    sonic_preset: t0
+
+  - name: leaf4
+    role: leaf
+    rail: 3
+    devid: 14
+    asn: 65104
+    loopback: 10.0.1.4/32
+    mgmt_ip: 10.10.0.34/24
+    sonic_type: ToRRouter
+    sonic_preset: t0
+
+  # ---- GPU compute nodes ---------------------------------------------------
+  # Each node has one NIC per rail. In a real HGX box this is 8 NICs / 8 GPUs;
+  # scaled to 4 here so the whole pod fits on a laptop.
+  - name: gpu01
+    role: gpu_node
+    devid: 21
+    mgmt_ip: 10.10.0.41/24
+    gpus: 4
+
+  - name: gpu02
+    role: gpu_node
+    devid: 22
+    mgmt_ip: 10.10.0.42/24
+    gpus: 4
+
+  - name: gpu03
+    role: gpu_node
+    devid: 23
+    mgmt_ip: 10.10.0.43/24
+    gpus: 4
+
+  - name: gpu04
+    role: gpu_node
+    devid: 24
+    mgmt_ip: 10.10.0.44/24
+    gpus: 4

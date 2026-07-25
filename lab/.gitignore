@@ -1,0 +1,10 @@
+# Rendered artifacts -- regenerate with ./lab.ps1 render
+out/
+
+# Generated from the source of truth
+docker-compose.fabric.yml
+seed/generated/
+seed/tftpboot/ipxe/boot.ipxe
+
+# The SONiC VS image (~210 MB compressed) -- fetch with scripts/fetch-sonic-image.ps1
+images/
