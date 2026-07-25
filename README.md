@@ -10,6 +10,8 @@ Specification and bootstrap stack for a **64× NVIDIA B200** research AI inferen
 | [docs/](docs/) | Build guide, network (ZTP/RoCE), overlay (EVPN/VXLAN), serving (Kimi K2 + API), bootstrap, NetBox SoT, cabling guide |
 | [bootstrap/](bootstrap/) | Seed host, Metal3/CAPI, Flux platform, NetBox |
 | [demo/](demo/) | Interactive live bring-up simulator (browser) |
+| [planner/](planner/) | Interactive room planner — size the hall, pick air/water cooling, add racks, choose the switching architecture and power plant → rack + cable labeling YAML ([spec](planner/SPEC.md)) |
+| [docs/training-guide/](docs/training-guide/) | *The AI Datacenter Network* — 12-chapter training guide on RDMA fabrics, lossless Ethernet, and GPU collective traffic |
 
 ## Highlights
 
@@ -29,6 +31,11 @@ Specification and bootstrap stack for a **64× NVIDIA B200** research AI inferen
 python3 -m http.server 8765 --directory demo
 # open http://127.0.0.1:8765
 
+# Room planner (design the hall → cable & label source of truth)
+python3 -m http.server 8777 --directory planner
+# open http://127.0.0.1:8777
+node planner/tools/plan.js --report          # same pipeline, headless
+
 # Design-time inventory + cabling (no hardware required)
 bash bootstrap/scripts/netbox-sync.sh --offline
 
@@ -46,6 +53,13 @@ python3 docs/md2pdf.py        # or: python3 docs/md2pdf.py docs/build-guide.md
 ```
 
 Styling is shared via [docs/template.typ](docs/template.typ); generated `.typ` files are overwritten on each run — edit the `.md` or the template, not the generated output.
+
+[docs/training-guide/](docs/training-guide/) is the exception: it is authored directly in Typst (no Markdown source, own [lib.typ](docs/training-guide/lib.typ) styling) and is not part of the `md2pdf.py` set. Build it with:
+
+```bash
+typst compile --root . docs/training-guide/main.typ \
+  docs/training-guide/AI-Datacenter-Network-Training-Guide.pdf
+```
 
 ## License
 

@@ -1,0 +1,120 @@
+{
+  "meta": {
+    "name": "pod-small",
+    "room": "Pod A",
+    "tenant": "research",
+    "description": "Compact 4-rack liquid-cooled pod — planner example"
+  },
+  "room": {
+    "width_m": 12,
+    "depth_m": 10,
+    "clear_height_m": 4.5,
+    "tile_m": 0.6,
+    "perimeter_m": 1.2,
+    "cold_aisle_m": 1.8,
+    "hot_aisle_m": 1.2,
+    "raised_floor": false,
+    "floor_capacity_kg_m2": 1220,
+    "tray_height_m": 3.2,
+    "power_tray_height_m": 3.8,
+    "data_tray_runs": 2,
+    "power_tray_runs": 2,
+    "fluid_tray_runs": 1
+  },
+  "cooling": {
+    "mode": "water",
+    "water_type": "dlc",
+    "crah_model": "crah-150",
+    "cdu_model": "cdu-inrow-1300",
+    "rdhx_model": "rdhx-100",
+    "redundancy": "N+1",
+    "supply_c": 32,
+    "return_c": 45,
+    "containment": "hot-aisle",
+    "racks_per_cdu": 8,
+    "air_kw_per_rack_cap": 40
+  },
+  "power": {
+    "volts": 415,
+    "phases": 3,
+    "entrances": 2,
+    "entrance_kw": 600,
+    "entrance_side": "west",
+    "ups_model": "ups-500",
+    "ups_redundancy": "N+1",
+    "distribution": "rpp",
+    "rpp_model": "rpp-400a",
+    "busway_model": "busway-800a",
+    "rack_pdu_model": "pdu-3ph-60a",
+    "pdus_per_rack": 2,
+    "breaker_derate": 0.8,
+    "emit_device_cords": false,
+    "pue_target": 1.25
+  },
+  "fabric": {
+    "arch": "rail-optimized",
+    "oversubscription": 1,
+    "tiers": 2,
+    "leaf_model": "7060dx5-32",
+    "spine_model": "7060dx5-64s",
+    "super_model": "7800r4-128",
+    "oob_model": "7010tx-48",
+    "pod_racks": 8,
+    "emit_oob": true
+  },
+  "workload": {
+    "tp_size": 16,
+    "pp_size": 2,
+    "dp_replicas": 2,
+    "collective": "all-reduce",
+    "base_affinity": 0.02
+  },
+  "optimizer": {
+    "seed": 20260725,
+    "partition": true,
+    "placement": "anneal",
+    "anneal_iters": 24000,
+    "anneal_start_t": 1,
+    "anneal_end_t": 0.01,
+    "objective_traffic_weight": 0.5,
+    "routing": "astar",
+    "congestion_weight": 0.6,
+    "bend_penalty_m": 1.5,
+    "bundle": true,
+    "slack_m": 1
+  },
+  "racks": [
+    {
+      "id": "r1",
+      "name": "GPU-01",
+      "layout": "gpu-dlc-b300",
+      "rack_type": "750-52u",
+      "servers": 8,
+      "pinned": null
+    },
+    {
+      "id": "r2",
+      "name": "GPU-02",
+      "layout": "gpu-dlc-b300",
+      "rack_type": "750-52u",
+      "servers": 8,
+      "pinned": null
+    },
+    {
+      "id": "r3",
+      "name": "NET-01",
+      "layout": "network-spine",
+      "rack_type": "600-48u",
+      "servers": 0,
+      "pinned": null
+    },
+    {
+      "id": "r4",
+      "name": "BOOT-01",
+      "layout": "mgmt-boot",
+      "rack_type": "600-48u",
+      "servers": 12,
+      "pinned": null
+    }
+  ]
+}
