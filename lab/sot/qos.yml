@@ -1,0 +1,55 @@
+# Source of Truth: lossless / QoS intent
+#
+# This is the config that separates an AI fabric from an enterprise one, and it is
+# exactly the config that is catastrophic to hand-edit per switch: a single leaf with
+# the wrong PFC priority or a missing ECN profile produces a silent straggler rather
+# than an outage. It belongs in the SoT and nowhere else.
+#
+# The generator renders these into the SONiC config_db QoS tables; the drift checker
+# reads them back out of CONFIG_DB and diffs.
+
+# RoCEv2 traffic is marked DSCP 24 -> traffic class 3. Congestion notification (CNP)
+# is DSCP 48 -> TC 6 and must never be paused or dropped.
+dscp_to_tc:
+  "24": 3      # RoCEv2 data
+  "48": 6      # CNP (congestion notification packets)
+  "0": 0       # everything else / TCP front-end
+
+# Priority Flow Control: only the RoCE lossless priority is paused. Pausing everything
+# is how you build a fabric that deadlocks.
+pfc:
+  lossless_priorities: [3]
+  watchdog:
+    enabled: true
+    action: drop
+    detection_time_ms: 200
+    restoration_time_ms: 200
+
+# ECN / WRED on the lossless queue. Marking early and gently is what keeps DCQCN in
+# its control range; thresholds too high and PFC does the work instead (bad), too low
+# and throughput collapses.
+ecn:
+  queue: 3
+  profile: AZURE_LOSSLESS
+  green_min_threshold_kb: 1000
+  green_max_threshold_kb: 2000
+  green_drop_probability: 5
+
+# Scheduler: strict priority for CNP so congestion feedback outruns the congestion.
+scheduler:
+  - queue: 3
+    type: DWRR
+    weight: 60
+  - queue: 6
+    type: STRICT      # CNP
+  - queue: 0
+    type: DWRR
+    weight: 40
+
+# sonic-vs implements the SAI virtual switch, which accepts and stores QoS objects but
+# does not emulate buffer behaviour -- there is no real ASIC to pause. The lab therefore
+# proves these values are *rendered and programmed consistently on every device*, which
+# is the operational failure mode; it cannot prove packet-level lossless behaviour.
+simulation_caveat: >
+  QoS/PFC/ECN state is verified as configured-and-consistent, not as packet-level
+  lossless behaviour. sonic-vs has no ASIC buffer model.

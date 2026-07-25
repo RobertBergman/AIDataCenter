@@ -1,0 +1,37 @@
+! GENERATED -- rendered by tools/gen_configs.py from the source of truth.
+! Device: {{ device.name }} ({{ device.role }})  ASN {{ device.asn }}
+!
+! Fetched over HTTP by the ZTP agent during boot. Never hand-edited: any local change
+! is drift, and scripts/check-drift.py will report it.
+!
+frr defaults datacenter
+hostname {{ device.name }}
+log syslog informational
+service integrated-vtysh-config
+!
+router bgp {{ device.asn }}
+ bgp router-id {{ router_id }}
+ no bgp default ipv4-unicast
+ no bgp ebgp-requires-policy
+ bgp bestpath as-path multipath-relax
+ timers bgp 3 9
+{% for n in neighbors %}
+ neighbor {{ n.ip }} remote-as {{ n.asn }}
+ neighbor {{ n.ip }} description {{ n.name }} via {{ n.port }}
+ neighbor {{ n.ip }} timers connect 5
+{% endfor %}
+ !
+ address-family ipv4 unicast
+{% for p in advertise %}
+  network {{ p }}
+{% endfor %}
+  {# Without multipath the whole point of a Clos -- ECMP across every spine -- is lost. #}
+  maximum-paths 16
+{% for n in neighbors %}
+  neighbor {{ n.ip }} activate
+  neighbor {{ n.ip }} soft-reconfiguration inbound
+{% endfor %}
+ exit-address-family
+!
+line vty
+!

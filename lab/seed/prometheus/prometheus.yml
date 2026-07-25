@@ -1,0 +1,41 @@
+# The seed scrapes itself and every node it provisioned.
+#
+# Targets are the DHCP reservations from the source of truth: if a device is in NetBox it
+# is scraped, whether or not anyone remembered to add it to a monitoring system. Missing
+# metrics from a device that should exist is itself the alert.
+
+global:
+  scrape_interval: 10s
+  evaluation_interval: 15s
+  external_labels:
+    pod: pod1
+
+scrape_configs:
+  - job_name: ztp
+    static_configs:
+      - targets: ["127.0.0.1:9095"]
+        labels: { component: seed-ztp }
+
+  - job_name: syslog
+    static_configs:
+      - targets: ["127.0.0.1:9101"]
+        labels: { component: seed-syslog }
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+        labels: { component: seed-prometheus }
+
+  # GPU compute nodes expose NIC/rail counters and a DCGM-shaped GPU metric set.
+  - job_name: gpu-nodes
+    static_configs:
+      - targets:
+          - "10.10.0.41:9200"
+          - "10.10.0.42:9200"
+          - "10.10.0.43:9200"
+          - "10.10.0.44:9200"
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "10\\.10\\.0\\.(\\d+):.*"
+        target_label: node_id
+        replacement: "gpu-${1}"
