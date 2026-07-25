@@ -10,6 +10,7 @@ Specification and bootstrap stack for a **64× NVIDIA B200** research AI inferen
 | [docs/](docs/) | Build guide, network (ZTP/RoCE), overlay (EVPN/VXLAN), serving (Kimi K2 + API), bootstrap, NetBox SoT, cabling guide |
 | [bootstrap/](bootstrap/) | Seed host, Metal3/CAPI, Flux platform, NetBox |
 | [demo/](demo/) | Interactive live bring-up simulator (browser) |
+| [planner/](planner/) | Interactive room planner — size the hall, pick air/water cooling, add racks, choose the switching architecture and power plant → rack + cable labeling YAML ([spec](planner/SPEC.md)) |
 | [docs/training-guide/](docs/training-guide/) | *The AI Datacenter Network* — 12-chapter training guide on RDMA fabrics, lossless Ethernet, and GPU collective traffic |
 
 ## Highlights
@@ -29,6 +30,11 @@ Specification and bootstrap stack for a **64× NVIDIA B200** research AI inferen
 # Interactive demo (simulated bootstrap → switches → GPU cluster)
 python3 -m http.server 8765 --directory demo
 # open http://127.0.0.1:8765
+
+# Room planner (design the hall → cable & label source of truth)
+python3 -m http.server 8777 --directory planner
+# open http://127.0.0.1:8777
+node planner/tools/plan.js --report          # same pipeline, headless
 
 # Design-time inventory + cabling (no hardware required)
 bash bootstrap/scripts/netbox-sync.sh --offline

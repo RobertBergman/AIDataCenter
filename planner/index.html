@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIDataCenter — Room Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">▦</div>
+        <div>
+          <h1>AIDataCenter Planner</h1>
+          <p class="subtitle">Room · cooling · power · fabric → cable &amp; label source of truth</p>
+        </div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div class="controls">
+        <span class="solve-state" id="solve-state">ready</span>
+        <button id="btn-resolve" class="primary" type="button">↻ Re-solve</button>
+        <button id="btn-download" type="button">⭳ YAML</button>
+        <button id="btn-reset" class="ghost" type="button">Reset</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- ------------------------------------------------------ controls -->
+      <aside class="sidebar" id="sidebar">
+        <section class="panel">
+          <h2>Room</h2>
+          <div class="field">
+            <label for="room-width">Width <output id="room-width-v"></output></label>
+            <input type="range" id="room-width" min="6" max="60" step="0.6" />
+          </div>
+          <div class="field">
+            <label for="room-depth">Depth <output id="room-depth-v"></output></label>
+            <input type="range" id="room-depth" min="6" max="60" step="0.6" />
+          </div>
+          <div class="field">
+            <label for="room-height">Clear height <output id="room-height-v"></output></label>
+            <input type="range" id="room-height" min="2.8" max="8" step="0.1" />
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="cold-aisle">Cold aisle (m)</label>
+              <input type="number" id="cold-aisle" min="0.9" max="4" step="0.1" />
+            </div>
+            <div class="field">
+              <label for="hot-aisle">Hot aisle (m)</label>
+              <input type="number" id="hot-aisle" min="0.6" max="4" step="0.1" />
+            </div>
+          </div>
+          <div class="field checkbox">
+            <label><input type="checkbox" id="raised-floor" /> Raised floor</label>
+          </div>
+          <p class="hint" id="room-hint"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Cooling</h2>
+          <div class="segmented" id="cooling-mode">
+            <button type="button" data-value="air">Air</button>
+            <button type="button" data-value="water">Water</button>
+          </div>
+          <div class="field" id="water-type-field">
+            <label for="water-type">Water type</label>
+            <select id="water-type">
+              <option value="dlc">Direct-to-chip (DLC) + in-row CDU</option>
+              <option value="rdhx">Rear-door heat exchanger</option>
+            </select>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="cool-redundancy">Redundancy</label>
+              <select id="cool-redundancy">
+                <option>N</option><option>N+1</option><option>2N</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="racks-per-cdu">Racks / CDU</label>
+              <input type="number" id="racks-per-cdu" min="1" max="40" step="1" />
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="supply-c">Supply °C</label>
+              <input type="number" id="supply-c" min="10" max="45" step="1" />
+            </div>
+            <div class="field">
+              <label for="return-c">Return °C</label>
+              <input type="number" id="return-c" min="15" max="70" step="1" />
+            </div>
+          </div>
+          <p class="hint" id="cooling-hint"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Power</h2>
+          <div class="grid2">
+            <div class="field">
+              <label for="entrances">Utility entrances</label>
+              <select id="entrances">
+                <option value="1">1 (no diversity)</option>
+                <option value="2">2 — A/B</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="entrance-kw">kW each</label>
+              <input type="number" id="entrance-kw" min="100" max="20000" step="100" />
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="ups-model">UPS</label>
+              <select id="ups-model"></select>
+            </div>
+            <div class="field">
+              <label for="ups-redundancy">UPS redundancy</label>
+              <select id="ups-redundancy">
+                <option>N</option><option>N+1</option><option>2N</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="distribution">Distribution</label>
+            <select id="distribution">
+              <option value="rpp">RPP panels (floor)</option>
+              <option value="busway">Overhead busway</option>
+            </select>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="rpp-model">RPP / busway</label>
+              <select id="rpp-model"></select>
+            </div>
+            <div class="field">
+              <label for="rack-pdu">Rack PDU</label>
+              <select id="rack-pdu"></select>
+            </div>
+          </div>
+          <div class="field checkbox">
+            <label><input type="checkbox" id="device-cords" /> Emit per-PSU cords in the schedule</label>
+          </div>
+          <p class="hint" id="power-hint"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Fabric</h2>
+          <div class="field">
+            <label for="arch">Switching architecture</label>
+            <select id="arch"></select>
+          </div>
+          <p class="hint" id="arch-hint"></p>
+          <div class="grid2">
+            <div class="field">
+              <label for="oversub">Oversubscription</label>
+              <select id="oversub">
+                <option value="1">1:1 (non-blocking)</option>
+                <option value="2">2:1</option>
+                <option value="4">4:1</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="tiers">Tiers</label>
+              <select id="tiers">
+                <option value="2">2 — leaf/spine</option>
+                <option value="3">3 — + super-spine</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="leaf-model">Leaf</label>
+              <select id="leaf-model"></select>
+            </div>
+            <div class="field">
+              <label for="spine-model">Spine</label>
+              <select id="spine-model"></select>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Workload <span class="muted">drives placement</span></h2>
+          <div class="grid3">
+            <div class="field">
+              <label for="tp">TP</label>
+              <input type="number" id="tp" min="1" max="64" step="1" />
+            </div>
+            <div class="field">
+              <label for="pp">PP</label>
+              <input type="number" id="pp" min="1" max="32" step="1" />
+            </div>
+            <div class="field">
+              <label for="dp">DP</label>
+              <input type="number" id="dp" min="1" max="64" step="1" />
+            </div>
+          </div>
+          <p class="hint">Tensor-parallel peers want the same rack; the partitioner minimises the GB/s that must leave one.</p>
+        </section>
+
+        <section class="panel">
+          <h2>Optimizer</h2>
+          <div class="grid2">
+            <div class="field">
+              <label for="placement">Placement</label>
+              <select id="placement">
+                <option value="anneal">Simulated annealing</option>
+                <option value="genetic">Genetic + anneal polish</option>
+                <option value="greedy">Greedy only</option>
+                <option value="sequential">Sequential (baseline)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="iters">Iterations</label>
+              <input type="number" id="iters" min="1000" max="200000" step="1000" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="obj-weight">Objective: cable length ↔ traffic locality <output id="obj-weight-v"></output></label>
+            <input type="range" id="obj-weight" min="0" max="1" step="0.05" />
+          </div>
+          <div class="grid2">
+            <div class="field checkbox">
+              <label><input type="checkbox" id="do-partition" /> Partition</label>
+            </div>
+            <div class="field checkbox">
+              <label><input type="checkbox" id="do-bundle" /> Trunk bundling</label>
+            </div>
+          </div>
+          <div class="field">
+            <label for="seed">Seed</label>
+            <input type="number" id="seed" step="1" />
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Racks <span class="muted" id="rack-count"></span></h2>
+          <div class="field">
+            <label for="add-layout">Add rack</label>
+            <div class="row">
+              <select id="add-layout"></select>
+              <button id="btn-add-rack" type="button">+</button>
+            </div>
+          </div>
+          <div class="rack-list" id="rack-list"></div>
+        </section>
+      </aside>
+
+      <!-- ---------------------------------------------------------- views -->
+      <section class="center">
+        <div class="tabs">
+          <button class="tab active" data-view="floor" type="button">Floor plan</button>
+          <button class="tab" data-view="elevation" type="button">Elevations</button>
+          <button class="tab" data-view="cables" type="button">Cable schedule</button>
+          <button class="tab" data-view="yaml" type="button">YAML</button>
+        </div>
+
+        <div class="view active" id="view-floor">
+          <div class="overlay-bar">
+            <span class="muted">Overlay</span>
+            <div class="segmented small" id="overlay-mode">
+              <button type="button" data-value="none" class="active">Racks</button>
+              <button type="button" data-value="data">Data trays</button>
+              <button type="button" data-value="power">Power trays</button>
+              <button type="button" data-value="heat">kW density</button>
+            </div>
+            <span class="legend" id="floor-legend"></span>
+          </div>
+          <div class="canvas-wrap">
+            <svg id="floorplan" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+          <p class="hint">Drag a rack to pin it to a position; the solver places every unpinned rack. Click to inspect.</p>
+        </div>
+
+        <div class="view" id="view-elevation">
+          <div class="elevation-wrap" id="elevations"></div>
+        </div>
+
+        <div class="view" id="view-cables">
+          <div class="overlay-bar">
+            <div class="segmented small" id="cable-filter"></div>
+            <input type="search" id="cable-search" placeholder="filter by label, device, port…" />
+            <span class="muted" id="cable-summary"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="schedule" id="cable-table"></table>
+          </div>
+        </div>
+
+        <div class="view" id="view-yaml">
+          <div class="overlay-bar">
+            <span class="muted" id="yaml-size"></span>
+            <button id="btn-copy" type="button">Copy</button>
+            <button id="btn-download2" type="button">Download</button>
+          </div>
+          <pre class="yaml" id="yaml-out"></pre>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------- report -->
+      <aside class="inspector">
+        <section class="panel">
+          <h2>Validation <span id="validation-badge" class="badge"></span></h2>
+          <div class="findings" id="findings"></div>
+        </section>
+        <section class="panel">
+          <h2>Optimization</h2>
+          <div class="report" id="report"></div>
+        </section>
+        <section class="panel">
+          <h2>Selection</h2>
+          <div class="report" id="selection">Nothing selected.</div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="js/util.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/design.js"></script>
+  <script src="js/floor.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/partition.js"></script>
+  <script src="js/placement.js"></script>
+  <script src="js/pathways.js"></script>
+  <script src="js/fabric.js"></script>
+  <script src="js/cooling.js"></script>
+  <script src="js/power.js"></script>
+  <script src="js/validate.js"></script>
+  <script src="js/build.js"></script>
+  <script src="js/yaml.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

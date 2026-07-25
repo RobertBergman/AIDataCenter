@@ -21,6 +21,10 @@ research AI inference cluster.
     [#link("bootstrap/")], [Seed host, Metal3/CAPI, Flux platform,
     NetBox],
     [#link("demo/")], [Interactive live bring-up simulator (browser)],
+    [#link("planner/")], [Interactive room planner --- size the hall,
+    pick air/water cooling, add racks, choose the switching architecture
+    and power plant → rack + cable labeling YAML
+    (#link("planner/SPEC.pdf")[spec])],
     [#link("docs/training-guide/")], [#emph[The AI Datacenter Network]
     --- 12-chapter training guide on RDMA fabrics, lossless Ethernet,
     and GPU collective traffic],
@@ -50,6 +54,11 @@ research AI inference cluster.
 # Interactive demo (simulated bootstrap → switches → GPU cluster)
 python3 -m http.server 8765 --directory demo
 # open http://127.0.0.1:8765
+
+# Room planner (design the hall → cable & label source of truth)
+python3 -m http.server 8777 --directory planner
+# open http://127.0.0.1:8777
+node planner/tools/plan.js --report          # same pipeline, headless
 
 # Design-time inventory + cabling (no hardware required)
 bash bootstrap/scripts/netbox-sync.sh --offline

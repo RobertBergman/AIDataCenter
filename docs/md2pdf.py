@@ -36,6 +36,8 @@ DOCS: list[tuple[str, str, str]] = [
     ("README.md", "AIDATACENTER — OVERVIEW", "2026-07-18"),
     ("bootstrap/README.md", "AIDATACENTER — BOOTSTRAP STACK", "2026-07-18"),
     ("demo/README.md", "AIDATACENTER — DEMO", "2026-07-18"),
+    ("planner/SPEC.md", "AIDATACENTER — PLANNER SPECIFICATION", "0.1 · 2026-07-25"),
+    ("planner/README.md", "AIDATACENTER — ROOM PLANNER", "0.1 · 2026-07-25"),
 ]
 
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
