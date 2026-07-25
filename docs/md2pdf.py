@@ -96,7 +96,7 @@ def convert(md_path: Path, kicker: str, rev: str) -> Path:
     typ_path = md_path.with_suffix(".typ")
     typ_path.write_text(
         f"// GENERATED from {rel} — do not edit. Regenerate: python3 docs/md2pdf.py\n"
-        f'#import "{import_path}": *\n'
+        f'#import "{import_path.as_posix()}": *\n'
         f'#show: doc.with(title: "{title}", kicker: "{kicker}", rev: "{rev}")\n\n'
         + body_typ
         + "\n",

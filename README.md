@@ -10,6 +10,7 @@ Specification and bootstrap stack for a **64× NVIDIA B200** research AI inferen
 | [docs/](docs/) | Build guide, network (ZTP/RoCE), overlay (EVPN/VXLAN), serving (Kimi K2 + API), bootstrap, NetBox SoT, cabling guide |
 | [bootstrap/](bootstrap/) | Seed host, Metal3/CAPI, Flux platform, NetBox |
 | [demo/](demo/) | Interactive live bring-up simulator (browser) |
+| [docs/training-guide/](docs/training-guide/) | *The AI Datacenter Network* — 12-chapter training guide on RDMA fabrics, lossless Ethernet, and GPU collective traffic |
 
 ## Highlights
 
@@ -46,6 +47,13 @@ python3 docs/md2pdf.py        # or: python3 docs/md2pdf.py docs/build-guide.md
 ```
 
 Styling is shared via [docs/template.typ](docs/template.typ); generated `.typ` files are overwritten on each run — edit the `.md` or the template, not the generated output.
+
+[docs/training-guide/](docs/training-guide/) is the exception: it is authored directly in Typst (no Markdown source, own [lib.typ](docs/training-guide/lib.typ) styling) and is not part of the `md2pdf.py` set. Build it with:
+
+```bash
+typst compile --root . docs/training-guide/main.typ \
+  docs/training-guide/AI-Datacenter-Network-Training-Guide.pdf
+```
 
 ## License
 
