@@ -61,22 +61,162 @@
   /* --------------------------------------------------------- power media --
    * Power runs are labeled and scheduled like data cables but live on a
    * physically separate pathway tier (see pathways.js `tier: "power"`).
+   *
+   * Unlike optics, power cable is *not* priced per link. A 400 A feeder is
+   * conductor sold by the metre, and the copper dominates: the difference
+   * between a 6 m feeder and a 30 m feeder is real money, and a flat per-run
+   * price hides it completely. So the cost of a power run is
+   *
+   *     cost_usd  +  cost_usd_per_m × length
+   *
+   * where `cost_usd` is what the two ends cost regardless of distance --
+   * terminations, lugs, the breaker at the source, the labour to land it -- and
+   * `cost_usd_per_m` is conductor plus containment plus the labour to pull it.
+   * That split is what lets the planner report a saving when a feeder gets
+   * shorter, which a single number cannot do.
    */
   const POWER_MEDIA = {
-    "whip-3ph-60a": { name: "60A 415V 3ph whip (IEC 60309)", amps: 60, volts: 415, phases: 3, cost_usd: 340, od_mm: 21 },
-    "whip-3ph-100a": { name: "100A 415V 3ph whip", amps: 100, volts: 415, phases: 3, cost_usd: 520, od_mm: 28 },
-    "feeder-400a": { name: "400A 415V feeder", amps: 400, volts: 415, phases: 3, cost_usd: 4200, od_mm: 58 },
-    "feeder-800a": { name: "800A 415V feeder", amps: 800, volts: 415, phases: 3, cost_usd: 7600, od_mm: 78 },
-    "busway-tap": { name: "Busway tap-off box", amps: 60, volts: 415, phases: 3, cost_usd: 780, od_mm: 21 },
-    "cord-c19": { name: "C19 rack cord", amps: 16, volts: 240, phases: 1, cost_usd: 18, od_mm: 9 },
-    "cord-c21": { name: "C21 rack cord (high-temp)", amps: 20, volts: 240, phases: 1, cost_usd: 24, od_mm: 10 },
+    "whip-3ph-60a": {
+      name: "60A 415V 3ph whip (IEC 60309)", amps: 60, volts: 415, phases: 3,
+      cost_usd: 340, cost_usd_per_m: 62, od_mm: 21,
+    },
+    "whip-3ph-100a": {
+      name: "100A 415V 3ph whip", amps: 100, volts: 415, phases: 3,
+      cost_usd: 520, cost_usd_per_m: 95, od_mm: 28,
+    },
+    "feeder-400a": {
+      name: "400A 415V feeder (2× 3/0 Cu per phase)", amps: 400, volts: 415, phases: 3,
+      cost_usd: 4200, cost_usd_per_m: 310, od_mm: 58,
+    },
+    "feeder-800a": {
+      name: "800A 415V feeder (3× 500 kcmil per phase)", amps: 800, volts: 415, phases: 3,
+      cost_usd: 7600, cost_usd_per_m: 640, od_mm: 78,
+    },
+    "feeder-1200a": {
+      name: "1200A 415V feeder (4× 500 kcmil per phase)", amps: 1200, volts: 415, phases: 3,
+      cost_usd: 11400, cost_usd_per_m: 980, od_mm: 104,
+    },
+    // Past ~1600 A cable stops being sensible and the run becomes bus duct.
+    "busduct-2500a": {
+      name: "2500A 415V non-segregated bus duct", amps: 2500, volts: 415, phases: 3,
+      cost_usd: 18000, cost_usd_per_m: 1450, od_mm: 180,
+    },
+    "busduct-3200a": {
+      name: "3200A 415V non-segregated bus duct", amps: 3200, volts: 415, phases: 3,
+      cost_usd: 23000, cost_usd_per_m: 1820, od_mm: 220,
+    },
+    "busduct-4000a": {
+      name: "4000A 415V non-segregated bus duct", amps: 4000, volts: 415, phases: 3,
+      cost_usd: 28500, cost_usd_per_m: 2250, od_mm: 260,
+    },
+
+    /* Lineup-internal connections.
+     *
+     * A UPS module tapping its switchboard, or a bypass wrapping from the input
+     * section to the output section, is not a cable pull. It is a breaker and a
+     * short length of factory bus inside one assembly -- no conduit, no tray, no
+     * pulling labour, and no separate terminations. Pricing those legs as cable
+     * feeders was charging $11,400 apiece for a 2 m connection that the
+     * switchgear order already largely covers, which made the correct topology
+     * look worse than the wasteful one.
+     */
+    "bus-section-800a": {
+      name: "Switchboard bus section + 800A breaker", amps: 800, volts: 415, phases: 3,
+      cost_usd: 3800, cost_usd_per_m: 180, od_mm: 90, lineup: true,
+    },
+    "bus-section-1600a": {
+      name: "Switchboard bus section + 1600A breaker", amps: 1600, volts: 415, phases: 3,
+      cost_usd: 6900, cost_usd_per_m: 320, od_mm: 130, lineup: true,
+    },
+    "bus-section-3000a": {
+      name: "Switchboard bus section + 3000A breaker", amps: 3000, volts: 415, phases: 3,
+      cost_usd: 12500, cost_usd_per_m: 520, od_mm: 190, lineup: true,
+    },
+    "bus-section-4000a": {
+      name: "Switchboard bus section + 4000A breaker", amps: 4000, volts: 415, phases: 3,
+      cost_usd: 16800, cost_usd_per_m: 690, od_mm: 240, lineup: true,
+    },
+    "busway-tap": {
+      name: "Busway tap-off box", amps: 60, volts: 415, phases: 3,
+      cost_usd: 780, cost_usd_per_m: 45, od_mm: 21,
+    },
+    "cord-c19": {
+      name: "C19 rack cord", amps: 16, volts: 240, phases: 1,
+      cost_usd: 18, cost_usd_per_m: 6, od_mm: 9,
+    },
+    "cord-c21": {
+      name: "C21 rack cord (high-temp)", amps: 20, volts: 240, phases: 1,
+      cost_usd: 24, cost_usd_per_m: 8, od_mm: 10,
+    },
   };
 
+  /** Ordered by ampacity; `pickPowerMedia` walks it for the smallest that carries. */
+  const POWER_LADDER = [
+    "whip-3ph-60a", "whip-3ph-100a", "feeder-400a",
+    "feeder-800a", "feeder-1200a",
+    "busduct-2500a", "busduct-3200a", "busduct-4000a",
+  ];
+
+  /** The same idea for connections that never leave a switchgear lineup. */
+  const BUS_LADDER = [
+    "bus-section-800a", "bus-section-1600a", "bus-section-3000a", "bus-section-4000a",
+  ];
+
+  /* -------------------------------------------------------- coolant media --
+   * Priced the same way as power, and for the same reason: hose and pipe are
+   * bought by the metre and installed by the metre. `cost_usd` is the pair of
+   * ends -- quick-disconnects on a rack drop, flanges and a valve on a header
+   * tap -- and `cost_usd_per_m` is the run itself, including insulation on the
+   * facility side.
+   *
+   * `lpm` is the working flow limit at sensible velocity. It was already here
+   * and nothing read it: media was picked off a `rack.kw > 60` threshold that
+   * never looked at ΔT, so the same rack drew a DN50 whether it needed 111
+   * L/min or 482. Flow is what sizes a pipe, so flow is what selects it now.
+   */
   const COOLANT_MEDIA = {
-    "hose-dn32": { name: "DN32 EPDM coolant hose", dn: 32, lpm: 120, cost_usd: 210, od_mm: 46 },
-    "hose-dn50": { name: "DN50 coolant hose", dn: 50, lpm: 300, cost_usd: 340, od_mm: 66 },
-    "pipe-dn100": { name: "DN100 facility loop pipe", dn: 100, lpm: 1200, cost_usd: 900, od_mm: 114 },
+    "hose-dn25": {
+      name: "DN25 EPDM coolant hose", dn: 25, lpm: 70, kind: "hose",
+      cost_usd: 160, cost_usd_per_m: 48, od_mm: 38,
+    },
+    "hose-dn32": {
+      name: "DN32 EPDM coolant hose", dn: 32, lpm: 120, kind: "hose",
+      cost_usd: 210, cost_usd_per_m: 62, od_mm: 46,
+    },
+    "hose-dn50": {
+      name: "DN50 coolant hose", dn: 50, lpm: 300, kind: "hose",
+      cost_usd: 340, cost_usd_per_m: 95, od_mm: 66,
+    },
+    "hose-dn65": {
+      name: "DN65 coolant hose", dn: 65, lpm: 520, kind: "hose",
+      cost_usd: 470, cost_usd_per_m: 130, od_mm: 82,
+    },
+    "pipe-dn100": {
+      name: "DN100 facility loop pipe", dn: 100, lpm: 1200, kind: "pipe",
+      cost_usd: 900, cost_usd_per_m: 240, od_mm: 114,
+    },
+    "pipe-dn125": {
+      name: "DN125 facility loop pipe", dn: 125, lpm: 1900, kind: "pipe",
+      cost_usd: 1150, cost_usd_per_m: 310, od_mm: 140,
+    },
+    "pipe-dn150": {
+      name: "DN150 facility loop pipe", dn: 150, lpm: 2800, kind: "pipe",
+      cost_usd: 1450, cost_usd_per_m: 395, od_mm: 168,
+    },
+    "pipe-dn200": {
+      name: "DN200 facility loop pipe", dn: 200, lpm: 5000, kind: "pipe",
+      cost_usd: 2200, cost_usd_per_m: 620, od_mm: 219,
+    },
   };
+
+  /**
+   * Two ladders, because the split is physical rather than cosmetic: a rack drop
+   * is flexible hose on quick-disconnects, a header tap is welded or grooved
+   * pipe. Sizing a rack onto DN100 or a facility header onto EPDM would both be
+   * arithmetically fine and unbuildable.
+   */
+  const COOLANT_HOSE_LADDER = ["hose-dn25", "hose-dn32", "hose-dn50", "hose-dn65"];
+  const COOLANT_PIPE_LADDER = ["pipe-dn100", "pipe-dn125", "pipe-dn150", "pipe-dn200"];
 
   /* -------------------------------------------------------------- servers --
    * `cooling` lists the modes a SKU can be deployed under. An NVL72 tray has no
@@ -172,10 +312,72 @@
     "busway-800a": { model: "Overhead busway 800A 415V", amps: 800, volts: 415, phases: 3 },
   };
 
+  /**
+   * Rack PDUs. `ru` is the rack height the PDU *consumes*: 0 for a 0U vertical
+   * strip on the rail, non-zero for a horizontal unit that eats usable U. A
+   * 100 kW rack takes three PDUs per side, so a 2U horizontal model costs 12U of
+   * the frame before a single server goes in -- which is why the elevation has
+   * to account for it rather than assume every PDU is free.
+   *
+   * `outlets` is the connector budget that has to cover the rack's PSU cords;
+   * high-draw GPU PSUs land on C19, so `outlets_c19` is the binding number, not
+   * the total.
+   */
   const RACK_PDU = {
-    "pdu-3ph-32a": { model: "0U 3ph 32A 415/240V", amps: 32, volts: 415, phases: 3, outlets: 36, weight_kg: 9 },
-    "pdu-3ph-60a": { model: "0U 3ph 60A 415/240V", amps: 60, volts: 415, phases: 3, outlets: 42, weight_kg: 12 },
-    "pdu-3ph-100a": { model: "0U 3ph 100A 415/240V", amps: 100, volts: 415, phases: 3, outlets: 48, weight_kg: 16 },
+    "pdu-3ph-32a": {
+      model: "0U 3ph 32A 415/240V", amps: 32, volts: 415, phases: 3,
+      outlets: 36, outlets_c13: 24, outlets_c19: 12, ru: 0, mount: "0U vertical", weight_kg: 9,
+    },
+    "pdu-3ph-60a": {
+      model: "0U 3ph 60A 415/240V", amps: 60, volts: 415, phases: 3,
+      outlets: 42, outlets_c13: 24, outlets_c19: 18, ru: 0, mount: "0U vertical", weight_kg: 12,
+    },
+    "pdu-3ph-100a": {
+      model: "0U 3ph 100A 415/240V", amps: 100, volts: 415, phases: 3,
+      outlets: 48, outlets_c13: 24, outlets_c19: 24, ru: 0, mount: "0U vertical", weight_kg: 16,
+    },
+    // Raritan's 34.5 kVA nameplate is the *derated* figure -- the unit is a 60 A
+    // inlet rated 48 A/phase continuous, and 415 × 48 × √3 / 1000 = 34.5. Entered
+    // here as amps: 60 so `breaker_derate` lands on it exactly once; entering the
+    // nameplate as kVA and derating again would give a phantom 27.6 kW.
+    "px3-5008i2r-q1": {
+      vendor: "Raritan", model: "Raritan PX3-5008I2R-Q1 (2U 3ph 60A 415/240V)",
+      amps: 60, volts: 415, phases: 3,
+      outlets: 18, outlets_c13: 6, outlets_c19: 12,
+      ru: 2, mount: "2U horizontal", weight_kg: 14,
+      inlet: "IEC 60309 3P+N+E 6h 60A", metering: "outlet-metered/switched",
+      nameplate_kva: 34.5,
+    },
+  };
+
+  /* ------------------------------------------------- switchgear + bypass --
+   * The assembly that sits between the service and the UPS modules and carries
+   * the maintenance bypass. Modeling it as one lineup rather than as loose
+   * modules is what collapses the feeder count: the service lands once per feed
+   * on the input section, the modules tap the bus, and the RPP breakers all live
+   * in the output section -- instead of one service feeder per UPS module.
+   *
+   * `bypass` is the wrap-around path used when the UPS is dropped for service.
+   * It has to carry the whole feed on its own, so it is rated against the
+   * entrance, not against one module.
+   */
+  const SWITCHBOARD = {
+    "swbd-1200a": {
+      model: "1200A 415V switchboard + maintenance bypass", amps: 1200, volts: 415, phases: 3,
+      w_m: 2.4, d_m: 1.2, sections: 3, weight_kg: 1900,
+    },
+    "swbd-2000a": {
+      model: "2000A 415V switchboard + maintenance bypass", amps: 2000, volts: 415, phases: 3,
+      w_m: 3.6, d_m: 1.2, sections: 4, weight_kg: 2800,
+    },
+    "swbd-3000a": {
+      model: "3000A 415V switchboard + maintenance bypass", amps: 3000, volts: 415, phases: 3,
+      w_m: 5.0, d_m: 1.2, sections: 5, weight_kg: 4200,
+    },
+    "swbd-4000a": {
+      model: "4000A 415V switchboard + maintenance bypass", amps: 4000, volts: 415, phases: 3,
+      w_m: 6.4, d_m: 1.4, sections: 6, weight_kg: 5600,
+    },
   };
 
   /* -------------------------------------------------------------- cooling -- */
@@ -288,12 +490,92 @@
     return null;
   }
 
+  const SQRT3 = Math.sqrt(3);
+
+  /** Continuous amps drawn by `kw` at the room's service voltage. */
+  function ampsFor(kw, volts, phases) {
+    const denom = (phases === 3 ? volts * SQRT3 : volts) / 1000;
+    return denom > 0 ? kw / denom : 0;
+  }
+
+  /**
+   * Smallest media on `ladder` that carries `kw` continuously.
+   *
+   * Sized against the derated ampacity, because a feeder is a continuous load
+   * like everything else on this chain -- an 800 A feeder is a 640 A feeder.
+   * Returns the top of the ladder when nothing carries, so the run is still
+   * emitted and validation can name it rather than the schedule silently
+   * dropping a circuit. `fits` is how the caller tells the two cases apart.
+   */
+  function pickFrom(ladder, kw, volts, phases, derate) {
+    const need = ampsFor(kw, volts, phases);
+    for (const key of ladder) {
+      const m = POWER_MEDIA[key];
+      if (m && m.amps * derate >= need) return { key, fits: true, amps_needed: need };
+    }
+    const key = ladder[ladder.length - 1];
+    return { key, fits: false, amps_needed: need };
+  }
+
+  function pickPowerMedia(kw, volts, phases, derate = 0.8) {
+    return pickFrom(POWER_LADDER, kw, volts, phases, derate).key;
+  }
+
+  /** As `pickPowerMedia`, but reports whether the pick actually carries the load. */
+  function sizePowerMedia(kw, volts, phases, derate = 0.8) {
+    return pickFrom(POWER_LADDER, kw, volts, phases, derate);
+  }
+
+  /** Media for a connection that stays inside a switchgear lineup. */
+  function sizeBusMedia(kw, volts, phases, derate = 0.8) {
+    return pickFrom(BUS_LADDER, kw, volts, phases, derate);
+  }
+
+  /** Specific heat of water, kJ/kg·K. Density ≈ 1 kg/L, so kg/min ≈ L/min. */
+  const WATER_CP = 4.19;
+
+  /** Volumetric flow to carry `kw` across `delta_t` kelvin: Q = m·cp·ΔT rearranged. */
+  function flowLpm(kw, delta_t) {
+    const dt = Math.max(1e-6, delta_t);
+    return (kw * 60) / (WATER_CP * dt);
+  }
+
+  /**
+   * Smallest hose or pipe that passes `lpm`.
+   *
+   * No extra derate: the catalog's `lpm` is already the working limit at an
+   * acceptable velocity, unlike an ampacity figure which is a nameplate the code
+   * then makes you discount. Returns the top of the ladder when nothing carries,
+   * with `fits: false`, so an under-sized run is emitted and named rather than
+   * dropped.
+   */
+  function sizeCoolantMedia(lpm, kind = "hose") {
+    const ladder = kind === "pipe" ? COOLANT_PIPE_LADDER : COOLANT_HOSE_LADDER;
+    for (const key of ladder) {
+      const m = COOLANT_MEDIA[key];
+      if (m && m.lpm >= lpm) return { key, fits: true, lpm_needed: lpm };
+    }
+    return { key: ladder[ladder.length - 1], fits: false, lpm_needed: lpm };
+  }
+
+  /** Smallest switchboard frame that carries `kw` continuously. */
+  function pickSwitchboard(kw, volts, phases, derate = 0.8) {
+    const need = ampsFor(kw, volts, phases);
+    const keys = Object.keys(SWITCHBOARD).sort((a, b) => SWITCHBOARD[a].amps - SWITCHBOARD[b].amps);
+    for (const key of keys) {
+      if (SWITCHBOARD[key].amps * derate >= need) return key;
+    }
+    return keys[keys.length - 1];
+  }
+
   DCP.Catalog = {
-    MEDIA, MEDIA_LADDER, POWER_MEDIA, COOLANT_MEDIA,
+    MEDIA, MEDIA_LADDER, POWER_MEDIA, POWER_LADDER, BUS_LADDER,
+    COOLANT_MEDIA, COOLANT_HOSE_LADDER, COOLANT_PIPE_LADDER,
     SERVERS, SWITCHES,
-    UPS, RPP, BUSWAY, RACK_PDU,
+    UPS, RPP, BUSWAY, RACK_PDU, SWITCHBOARD,
     CRAH, CDU, RDHX,
     RACK_TYPES, RACK_LAYOUTS, FABRIC_ARCHS,
-    pickMedia,
+    pickMedia, pickPowerMedia, sizePowerMedia, sizeBusMedia, pickSwitchboard, ampsFor,
+    flowLpm, sizeCoolantMedia, WATER_CP,
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

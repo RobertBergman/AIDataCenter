@@ -85,6 +85,39 @@
       }
     }
 
+    /* ------------------------------------------------- floor collisions --- */
+    // Two things cannot stand on the same square metre. Worth checking rather
+    // than assuming: floor positions are cut to the row pitch, so anything wider
+    // than a rack silently overhangs its neighbours, and equipment that gets
+    // slid toward the load it serves can be slid straight into a peer.
+    //
+    // Attachments are skipped on purpose -- a rack manifold or a rear-door heat
+    // exchanger hangs on a frame rather than standing on the floor, and carries a
+    // zero footprint to say so (rear-door depth is already in the row pitch).
+    const COLLIDE_TOL_M = 0.005;
+    const footprints = [
+      ...racks
+        .filter((r) => r.x !== undefined && r.y !== undefined)
+        .map((r) => ({ name: r.name, kind: "rack", x: r.x, y: r.y, w: r.frame.w_m, d: r.frame.d_m })),
+      ...(model.equipment || [])
+        .filter((e) => e.x !== undefined && e.y !== undefined && e.w_m > 0 && e.d_m > 0)
+        .map((e) => ({ name: e.name || e.id, kind: e.kind || "equipment", x: e.x, y: e.y, w: e.w_m, d: e.d_m })),
+    ];
+    for (let i = 0; i < footprints.length; i++) {
+      for (let j = i + 1; j < footprints.length; j++) {
+        const a = footprints[i];
+        const b = footprints[j];
+        const ox = (a.w + b.w) / 2 - Math.abs(a.x - b.x);
+        const oy = (a.d + b.d) / 2 - Math.abs(a.y - b.y);
+        if (ox > COLLIDE_TOL_M && oy > COLLIDE_TOL_M) {
+          add("error", "room.collision",
+            `${a.name} (${a.kind}) and ${b.name} (${b.kind}) occupy the same floor space — ` +
+            `they overlap by ${R(ox, 2)} × ${R(oy, 2)} m`,
+            a.name);
+        }
+      }
+    }
+
     /* ---------------------------------------------------------- cooling --- */
     if (cooling.capacity_kw < totals.it_load_kw) {
       add("error", "cooling.capacity",
@@ -136,6 +169,36 @@
           `${d.name}: ${d.load_kw} kW on a ${d.capacity_kw} kW run`, d.name);
       }
     }
+    /* --------------------------------------------- switchboard + bypass --- */
+    for (const board of power.switchboards || []) {
+      if (board.capacity_kw < t.it_load_kw) {
+        add("error", "power.switchboard",
+          `${board.name}: ${board.capacity_kw} kW frame on a feed that must carry ${t.it_load_kw} kW alone`,
+          board.name);
+      }
+      if (!board.bypass) {
+        add("warn", "power.bypass",
+          `${board.name} has no maintenance bypass — the UPS cannot be taken out of the path for service ` +
+          `without dropping the whole ${board.feed} feed`, board.name);
+      } else if (board.bypass_rating_kw < t.it_load_kw) {
+        add("error", "power.bypass",
+          `${board.name}: bypass rated ${board.bypass_rating_kw} kW but has to carry ${t.it_load_kw} kW ` +
+          `on its own while the UPS is out`, board.name);
+      }
+    }
+
+    // A run whose media could not be found on the ladder is emitted anyway so it
+    // is visible; this is where it gets named. Covers both chains: a feeder that
+    // no conductor carries and a hose that no bore passes are the same failure.
+    for (const c of cables) {
+      if (!c.undersized) continue;
+      add("error", c.class === "coolant" ? "cooling.flow" : "power.ampacity",
+        `${c.label}: no ${c.class === "coolant" ? "hose or pipe" : "power media"} carries this run — ` +
+        `sized up to ${c.media} and still short` +
+        (c.sizing_need ? ` of ${c.sizing_need}` : ""),
+        c.label);
+    }
+
     const pduByRack = DCP.Util.groupBy(power.rack_pdus, (p) => `${p.rack}:${p.feed}`);
     for (const [key, pdus] of pduByRack) {
       const rack = racks.find((r) => r.name === pdus[0].rack);
@@ -144,6 +207,31 @@
       if (side < rack.kw) {
         add("error", "power.rack_pdu",
           `${key}: ${R(side, 1)} kW of PDU on a side that must carry ${rack.kw} kW alone`, pdus[0].rack);
+      }
+
+      // Capacity is not the only way a PDU runs out. Cords need connectors, and
+      // the high-draw ones need C19 specifically -- a PDU can have plenty of
+      // kilowatts left and nowhere to plug the next PSU in.
+      const feeds = power.feeds.length || 1;
+      let need = 0;
+      let needC19 = 0;
+      for (const dev of rack.devices) {
+        if (dev.kind !== "server" || dev.busbar_powered || !dev.psus) continue;
+        const sku = DCP.Catalog.SERVERS[dev.sku];
+        const perSide = Math.ceil(dev.psus / feeds);
+        need += perSide;
+        if (sku && sku.psu_kw > 2) needC19 += perSide;
+      }
+      const have = DCP.Util.sum(pdus, (p) => p.outlets || 0);
+      const haveC19 = DCP.Util.sum(pdus, (p) => p.outlets_c19 || 0);
+      if (need > have) {
+        add("error", "power.outlets",
+          `${key}: ${need} cords on this side but only ${have} outlets across ${pdus.length} PDU(s)`,
+          pdus[0].rack);
+      } else if (needC19 > haveC19) {
+        add("error", "power.outlets",
+          `${key}: ${needC19} high-draw cords need C19 but the side offers ${haveC19}`,
+          pdus[0].rack);
       }
     }
     const sharedAB = cables.filter((c) => c.class === "power" && c.shared_segments_with_a > 0);
@@ -232,6 +320,18 @@
       add("warn", "workload.tp_split",
         `${tpCrossing} tensor-parallel peer links cross a rack boundary — TP traffic should stay inside one rack`,
         "workload");
+    }
+
+    /* ----------------------------------------------- build-stage notes ---- */
+    // fabric.js, cooling.js and power.js each report what only they can see: a
+    // CDU with no run of slots wide enough to stand on, a distribution zone too
+    // short for its own panels. Those were collected into model.warnings and
+    // surfaced nowhere but the YAML dump, which is the one place nobody looks
+    // when the drawing is wrong. Same channel as everything else, at the end so
+    // the specific checks above are read first.
+    const seen = new Set(out.map((o) => o.message));
+    for (const note of model.warnings || []) {
+      if (!seen.has(note)) add("warn", "build.note", note, null);
     }
 
     const errors = out.filter((o) => o.severity === "error").length;

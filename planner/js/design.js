@@ -50,7 +50,7 @@
         air_kw_per_rack_cap: 40, // practical ceiling for contained air
       },
 
-      /* Utility entrance → UPS → RPP/busway → rack PDU → PSU cords. */
+      /* Utility entrance → switchboard (+bypass) → UPS → RPP/busway → rack PDU. */
       power: {
         volts: 415,
         phases: 3,
@@ -59,7 +59,18 @@
         entrance_side: "west",   // wall the service lands on
         ups_model: "ups-500",
         ups_redundancy: "N+1",   // "N" | "N+1" | "2N"
+        // The service lands once per feed on a switchboard lineup; the UPS
+        // modules tap its bus and the RPP breakers live in its output section.
+        // "auto" sizes the frame against the entrance. The maintenance bypass is
+        // a section of this lineup, so it costs no feeder of its own.
+        switchboard_model: "auto",
+        maintenance_bypass: true,
         distribution: "rpp",     // "rpp" | "busway"
+        // "spine" puts the RPP column inside the rack block, between the UPS and
+        // the load. "wall" parks it on the far wall — tidier drawing, and every
+        // feeder then crosses the room while every whip crosses back. "auto"
+        // takes the spine only where the room has the slots to pay for it.
+        rpp_siting: "auto",      // "auto" | "spine" | "wall"
         rpp_model: "rpp-400a",
         busway_model: "busway-800a",
         rack_pdu_model: "pdu-3ph-60a",
@@ -99,9 +110,14 @@
         anneal_iters: 24000,
         anneal_start_t: 1.0,
         anneal_end_t: 0.01,
-        // Multi-objective mix for the QAP: 1.0 = pure traffic locality,
-        // 0.0 = pure cable-length minimisation.
+        // Share of the placement objective spent on traffic locality rather than
+        // on the cable bill. The solver converts it into a shadow price in
+        // $ per GB/s·m against the baseline layout, so both halves of the
+        // objective stay in units someone can argue with.
         objective_traffic_weight: 0.5,
+        // Installed labour per metre pulled. Keeps distance worth minimising in
+        // rooms where every layout buys the same media anyway.
+        pull_cost_usd_per_m: 2.0,
         routing: "astar",        // congestion-aware A* over the pathway graph
         congestion_weight: 0.6,
         bend_penalty_m: 1.5,

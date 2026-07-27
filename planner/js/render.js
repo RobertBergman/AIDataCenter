@@ -16,6 +16,7 @@
   const EQUIP_COLOR = {
     cdu: "#4dd0e1", crah: "#90a4ae", rdhx: "#26a69a", manifold: "transparent",
     ups: "#ffb74d", rpp: "#a1887f", busway: "#8d6e63", entrance: "#ef5350",
+    switchboard: "#f06292",
   };
 
   /** Blue → amber → red ramp for fill and density overlays. */
@@ -123,10 +124,18 @@
       const w = eq.w_m || 0.8;
       const d = eq.d_m || 0.8;
       const isEntrance = eq.id && String(eq.id).startsWith("entrance");
+      // Mark the bypass section so a lineup that can be worked on live reads
+      // differently from one that cannot.
+      const bypass = kind === "switchboard" && eq.bypass
+        ? `<rect x="${(eq.x || 0) - w / 2 + 0.06}" y="${(eq.y || 0) - d / 2 + 0.06}"
+             width="${Math.max(0.05, w - 0.12)}" height="${Math.max(0.05, d - 0.12)}" rx="0.04"
+             fill="none" stroke="${color}" stroke-width="0.04" stroke-dasharray="0.3 0.2"/>`
+        : "";
       parts.push(`<g class="equip-shape" data-equip="${esc(eq.id)}">
         <rect x="${(eq.x || 0) - (isEntrance ? 0.2 : w / 2)}" y="${(eq.y || 0) - d / 2}"
           width="${isEntrance ? 0.4 : w}" height="${d}" rx="0.05"
           fill="${color}" fill-opacity="0.35" stroke="${color}" stroke-width="0.05"/>
+        ${bypass}
         ${t(eq.x, eq.y, eq.name, 0.16)}
       </g>`);
     }
@@ -206,10 +215,15 @@
       for (let u = 1; u <= height; u++) {
         const dev = slots[u];
         if (dev) {
-          const color = dev.kind === "switch" ? "#ff9800" : ROLE_COLOR.compute;
+          const color = dev.kind === "switch" ? "#ff9800"
+            : dev.kind === "pdu" ? EQUIP_COLOR.rpp
+            : ROLE_COLOR.compute;
+          // A horizontal PDU is real estate like anything else in the frame, so
+          // it is drawn in the stack rather than only as a chip underneath.
+          const detail = dev.kind === "pdu" ? `${dev.amps}A ${dev.feed}` : `${dev.kw}kW`;
           rows.push(`<div class="u-dev" style="height:${dev.ru * U_PX}px;background:${dev.class === "nvlink" ? "#7e57c2" : color}"
-            title="${esc(dev.name)} — ${esc(dev.model)} · U${dev.u} · ${dev.kw} kW">
-            <span>${esc(dev.name)}</span><span>${dev.kw}kW</span></div>`);
+            title="${esc(dev.name)} — ${esc(dev.model)} · U${dev.u}${dev.kind === "pdu" ? "" : ` · ${dev.kw} kW`}">
+            <span>${esc(dev.name)}</span><span>${esc(detail)}</span></div>`);
           u += dev.ru - 1;
         } else {
           rows.push(`<div class="u-slot"></div>`);
@@ -223,7 +237,7 @@
           ${rack.u_used}/${height}U · ${rack.kw} kW · ${rack.weight_kg} kg${rack.gpus ? ` · ${rack.gpus} GPU` : ""}</div>
         <div class="u-stack">${rows.join("")}</div>
         <div class="pdu-strip">${pdus.map((p) =>
-          `<span class="pdu-chip ${p.feed.toLowerCase()}" title="${esc(p.model)} · ${p.usable_kw} kW usable">${esc(p.name.replace(`PDU-${rack.name}-`, ""))} ${p.amps}A</span>`).join("")}</div>
+          `<span class="pdu-chip ${p.feed.toLowerCase()}" title="${esc(p.model_name || p.model)} · ${p.usable_kw} kW usable · ${p.outlets} outlets (${p.outlets_c19} × C19) · ${esc(p.mount)}">${esc(p.name.replace(`PDU-${rack.name}-`, ""))} ${p.amps}A${p.ru ? ` ${p.ru}U` : ""}</span>`).join("")}</div>
       </div>`;
     }).join("");
   }
@@ -315,11 +329,38 @@
       kv("multilevel depth", o.partition.levels),
 
       `<h4>Placement (QAP)</h4>`,
-      kv("method", o.placement.method),
-      kv("objective Σ F·D", o.placement.objective.toFixed(4)),
-      kv("vs baseline", pctText(o.placement.improvement_pct), o.placement.improvement_pct > 0 ? "win" : ""),
+      kv("method", `${o.placement.method}${o.placement.seed ? ` · ${o.placement.seed} seed` : ""}`),
+      kv("inter-rack media", `$${o.placement.cost_usd.toLocaleString("en-US")}`),
+      kv("vs baseline", pctText(o.placement.cost_improvement_pct), o.placement.cost_improvement_pct > 0 ? "win" : ""),
+      kv("routed length", `${o.placement.length_m} m`),
+      kv("vs baseline", pctText(o.placement.length_improvement_pct), o.placement.length_improvement_pct > 0 ? "win" : ""),
       o.placement.accepted !== undefined ? kv("moves accepted", `${o.placement.accepted} / ${o.placement.iters || "—"}`) : "",
-      kv("objective mix", `${Math.round(o.placement.traffic_weight * 100)}% traffic / ${Math.round(o.placement.cable_weight * 100)}% cable`),
+      kv("objective mix", `${Math.round(o.placement.traffic_weight * 100)}% traffic`),
+
+      // The honest part: how much of the bill any arrangement could have moved.
+      `<h4>Placement leverage</h4>`,
+      kv("rack spacing range", `${o.placement.span_m[0]}–${o.placement.span_m[1]} m`),
+      kv("locked by reach", `$${o.placement.fixed_usd.toLocaleString("en-US")} · ${o.placement.pinned_groups} pairs`),
+      kv("movable by layout", `$${o.placement.movable_usd.toLocaleString("en-US")} · ${o.placement.movable_groups} pairs`),
+      kv("achievable range", `$${o.placement.leverage_usd.toLocaleString("en-US")}`,
+        o.placement.leverage_usd > 0 ? "" : "muted"),
+      kv("gap to lower bound", `${o.placement.gap_pct}%`),
+      o.placement.leverage_usd === 0
+        ? `<p class="hint">Every inter-rack run in this room lands on the same rung of the
+           reach ladder, so no arrangement of racks can change what the optics cost.
+           The levers here are fabric architecture and cable overhead, not placement.</p>`
+        : "",
+      ...(o.placement.unlock.length
+        ? [`<h4>If every run were shorter</h4>`,
+           ...o.placement.unlock.map((u) =>
+             kv(`−${u.delta_m} m per link`,
+                `save $${u.saving_usd.toLocaleString("en-US")} · ${u.links_reclassed} links`, "win"))]
+        : []),
+      o.placement.calibration && o.placement.calibration.cables
+        ? kv("estimator error",
+            `${o.placement.calibration.mean_error_m} m mean · ${o.placement.calibration.media_mismatch} mispriced`,
+            o.placement.calibration.media_mismatch ? "warn" : "")
+        : "",
 
       `<h4>Routing (A*)</h4>`,
       kv("data tray peak fill", `${(o.routing.data_tray.peak_fill * 100).toFixed(0)}%`),
@@ -384,6 +425,7 @@
     return Object.entries(ROLE_COLOR)
       .map(([k, v]) => `<span><i style="background:${v}"></i>${k}</span>`).join("")
       + `<span><i style="background:${EQUIP_COLOR.cdu}"></i>CDU</span>`
+      + `<span><i style="background:${EQUIP_COLOR.switchboard}"></i>switchboard + bypass</span>`
       + `<span><i style="background:${EQUIP_COLOR.ups}"></i>UPS</span>`
       + `<span><i style="background:${EQUIP_COLOR.rpp}"></i>RPP</span>`
       + `<span><i style="background:${EQUIP_COLOR.entrance}"></i>service</span>`;

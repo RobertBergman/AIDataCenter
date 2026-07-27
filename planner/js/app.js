@@ -97,9 +97,12 @@
       (c.mode === "water" ? ` · ${c.flow_lpm} L/min at ΔT ${c.delta_t} K` : "");
 
     const p = m.power.totals;
+    const powerCable = m.totals.cables_by_class.power || { length_m: 0, cost_usd: 0 };
     $("power-hint").textContent =
       `${p.facility_kw} kW facility · UPS firm ${p.ups_firm_capacity_per_feed_kw} kW/feed · ` +
-      `${p.distribution_units} distribution units · ${p.rack_pdu_count} rack PDUs`;
+      `${p.distribution_units} distribution units · ${p.rack_pdu_count} rack PDUs · ` +
+      `${powerCable.length_m} m of power cable ($${(powerCable.cost_usd || 0).toLocaleString("en-US")})` +
+      (p.slots_lost_to_spine ? ` · spine costs ${p.slots_lost_to_spine} rack slots` : "");
 
     $("arch-hint").textContent = DCP.Catalog.FABRIC_ARCHS[state.design.fabric.arch].desc;
     $("rack-count").textContent = `${state.design.racks.length} racks`;
@@ -256,9 +259,10 @@
     bind("ups-model", "power.ups_model");
     bind("ups-redundancy", "power.ups_redundancy");
     bind("distribution", "power.distribution", { after: refreshDistributionOptions });
-    bind("rack-pdu", "power.rack_pdu_model");
+    bind("rpp-siting", "power.rpp_siting");
     fillSelect("rack-pdu", Object.entries(C.RACK_PDU).map(([k, v]) => [k, v.model]), state.design.power.rack_pdu_model);
     bind("rack-pdu", "power.rack_pdu_model");
+    bind("maintenance-bypass", "power.maintenance_bypass");
     bind("device-cords", "power.emit_device_cords");
     refreshDistributionOptions(state.design.power.distribution);
 
@@ -306,6 +310,9 @@
         set(path, el.value);
         requestSolve(0);
       };
+      // Busway hangs over the rows and has no floor column to site, so the
+      // siting choice has nothing to act on.
+      $("rpp-siting").parentElement.style.display = mode === "busway" ? "none" : "";
     }
 
     function refreshLayoutOptions() {

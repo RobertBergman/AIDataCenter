@@ -32,13 +32,20 @@
 
   const U_METRE = 0.04445;      // 1U in metres, for intra-rack cable estimates
   const DRESS_M = 1.4;          // slack for dressing a cable inside a frame
-  const OBJ_TRAFFIC = 0.5;      // multi-objective weights: traffic locality …
-  const OBJ_CABLE = 0.5;        // … vs total cable length
+  const OBJ_TRAFFIC = 0.5;      // share of the objective spent on traffic locality
+  // Installed labour and containment per metre pulled. Small next to a $1450
+  // transceiver, but it is what gives the solver a gradient to follow when a
+  // whole room sits inside one media price step and every layout costs the same.
+  const PULL_USD_PER_M = 2.0;
+
+  const EMPTY_TERMS = {
+    material_usd: 0, pull_usd: 0, length_m: 0,
+    traffic_moment: 0, traffic_usd: 0, objective: 0,
+  };
 
   function build(design) {
     const C = DCP.Catalog;
     const warnings = [];
-    const floor = DCP.Floor.plan(design);
 
     /* ------------------------------------------- 1. fleet + traffic ------ */
     const fleet = DCP.Graph.buildFleet(design);
@@ -130,6 +137,20 @@
       elevate(rack, fabric.byRack.get(rack.id) || []);
     }
 
+    /* ------------------------------------------- 5b. room geometry ------- */
+    // The floor plan is drawn only now, because the electrical strip has to be
+    // wide enough for the plant that will stand in it and that plant is sized
+    // from the IT load -- which does not exist until the racks are elevated.
+    // Everything above this point is topology and knows nothing about metres.
+    const itLoadKw = DCP.Util.sum(racks, (r) => r.kw);
+    const elecPlan = DCP.Power.sizeElectricalZone(design, itLoadKw);
+    const floor = DCP.Floor.plan(design, { electrical_width_m: elecPlan.width_m });
+    if (elecPlan.columns > 1) {
+      warnings.push(`electrical plant needs ${elecPlan.columns} columns ` +
+        `(${elecPlan.run_length_m} m of lineup against ${elecPlan.available_m} m of wall) — ` +
+        `the strip was widened to ${elecPlan.width_m} m, taking floor from the rack block`);
+    }
+
     // OOB/mgmt cabling needs the final device list.
     const oobLinks = DCP.Fabric.cableOob({ design, racks }, fabric);
 
@@ -143,26 +164,18 @@
     const rackIds = racks.map((r) => r.id);
     const flow = DCP.Graph.rackFlowMatrix(rackIds, mapAssignment(assignment, fleet), traffic.edges);
 
-    // Cable-count matrix: Σ F_cable · D is literally total cable length, so this
-    // term makes the placement solver a cable-length minimizer directly.
-    const cableCount = Array.from({ length: rackIds.length }, () => new Float64Array(rackIds.length));
-    const rackIndex = new Map(rackIds.map((id, i) => [id, i]));
-    for (const link of [...fabric.links, ...oobLinks]) {
-      if (link.in_rack) continue;
-      const a = rackIndex.get(keyRack(link.from_key));
-      const b = rackIndex.get(keyRack(link.to_key));
-      if (a === undefined || b === undefined || a === b) continue;
-      cableCount[a][b] += 1;
-      cableCount[b][a] += 1;
-    }
+    // Exact tray distance between every candidate position, walked over the same
+    // pathway skeleton the router will use later. Memoised on room geometry, so
+    // the cost is paid once per room rather than once per solve.
+    const dist = DCP.Cost.positionDistances(floor, design);
+    const slack2 = design.optimizer.slack_m * 2;
 
-    const trafficSum = Math.max(1e-9, sumMatrix(flow.F));
-    const cableSum = Math.max(1e-9, sumMatrix(cableCount));
-    const wTraffic = design.optimizer.objective_traffic_weight ?? OBJ_TRAFFIC;
-    const wCable = 1 - wTraffic;
-    const F = Array.from({ length: rackIds.length }, (_, i) =>
-      Float64Array.from({ length: rackIds.length }, (_, j) =>
-        (wTraffic * flow.F[i][j]) / trafficSum + (wCable * cableCount[i][j]) / cableSum));
+    // The objective's two inputs, both sparse: one group per rack pair per speed
+    // (the bill, priced off the media reach ladder) and the surviving inter-rack
+    // demand (locality). Neither is a dense n×n matrix any more -- the solver
+    // only ever touches the pairs that actually carry something.
+    const linkGroups = DCP.Cost.linkGroups(rackIds, [...fabric.links, ...oobLinks]);
+    const flowGroups = DCP.Cost.flowGroups(flow.F);
 
     const pins = {};
     racks.forEach((r, i) => {
@@ -171,14 +184,28 @@
       if (p) pins[i] = floor.positions.indexOf(p);
     });
 
-    let placement = { posOf: new Int32Array(racks.length), cost: 0, baseline: 0, method: "none", stats: {} };
+    const problem = {
+      n: racks.length,
+      dist,
+      positions: floor.positions,
+      groups: linkGroups,
+      flows: flowGroups,
+      slack2,
+    };
+
+    let placement = {
+      posOf: new Int32Array(racks.length), method: "none", lambda: 0, stats: {},
+      terms: EMPTY_TERMS, baseline: EMPTY_TERMS,
+    };
     if (floor.positions.length >= racks.length && racks.length > 0) {
-      placement = DCP.Placement.place(F, floor.positions, {
+      placement = DCP.Placement.place(problem, {
         method: design.optimizer.placement,
         seed: design.optimizer.seed,
         iters: design.optimizer.anneal_iters,
         t0: design.optimizer.anneal_start_t,
         t1: design.optimizer.anneal_end_t,
+        traffic_weight: design.optimizer.objective_traffic_weight ?? OBJ_TRAFFIC,
+        pull_cost_usd_per_m: design.optimizer.pull_cost_usd_per_m ?? PULL_USD_PER_M,
         pins,
         frozen: Object.keys(pins).map(Number),
       });
@@ -188,6 +215,16 @@
         placement.posOf[i] = Math.min(i, Math.max(0, floor.positions.length - 1));
       });
     }
+
+    // How much of the bill placement can move at all, and what it would take to
+    // reach the next cheaper media class. See cost.js -- when a room sits inside
+    // one price step this is the only honest thing the report can say.
+    const leverage = racks.length && floor.positions.length
+      ? DCP.Cost.bounds(linkGroups, dist, slack2, placement.posOf)
+      : null;
+    const unlock = leverage
+      ? DCP.Cost.unlockCurve(linkGroups, dist, placement.posOf, slack2)
+      : [];
 
     const usedPositions = new Set();
     racks.forEach((rack, i) => {
@@ -203,32 +240,101 @@
     });
 
     const freePositions = floor.positions.filter((p) => !usedPositions.has(p.id));
+    const claim = (p) => {
+      const i = freePositions.indexOf(p);
+      if (i >= 0) freePositions.splice(i, 1);
+      usedPositions.add(p.id);
+    };
+
     const takeFreePosition = (x, y) => {
       if (!freePositions.length) return null;
-      let best = 0;
+      let best = null;
       let bestD = Infinity;
-      freePositions.forEach((p, i) => {
+      for (const p of freePositions) {
         const d = Math.abs(p.x - x) + Math.abs(p.y - y);
         if (d < bestD) {
           bestD = d;
-          best = i;
+          best = p;
         }
-      });
-      const [p] = freePositions.splice(best, 1);
-      usedPositions.add(p.id);
-      return p;
+      }
+      if (best) claim(best);
+      return best;
+    };
+
+    /**
+     * Claim enough adjacent slots to actually seat something `width_m` wide.
+     *
+     * Floor positions are cut to the row pitch, which is the widest *rack* in the
+     * design. Anything wider that gets dropped into one of them -- a 900 mm
+     * in-row CDU in a 750 mm row -- overhangs into its neighbours by the
+     * difference. Reserving a run of consecutive slots in one row and centring on
+     * it is the honest version, and it fails loudly when no run is wide enough
+     * instead of quietly double-booking the floor.
+     */
+    const takeFreeRun = (x, y, width_m) => {
+      const need = Math.max(1, Math.ceil(width_m / floor.pitch - 1e-9));
+      if (need === 1) return takeFreePosition(x, y);
+
+      const byRow = new Map();
+      for (const p of freePositions) {
+        if (!byRow.has(p.row)) byRow.set(p.row, []);
+        byRow.get(p.row).push(p);
+      }
+
+      let best = null;
+      let bestD = Infinity;
+      for (const list of byRow.values()) {
+        list.sort((a, b) => a.slot - b.slot);
+        for (let i = 0; i + need <= list.length; i++) {
+          let contiguous = true;
+          for (let k = 1; k < need; k++) {
+            if (list[i + k].slot !== list[i].slot + k) {
+              contiguous = false;
+              break;
+            }
+          }
+          if (!contiguous) continue;
+          const run = list.slice(i, i + need);
+          const cx = DCP.Util.sum(run, (p) => p.x) / need;
+          const d = Math.abs(cx - x) + Math.abs(run[0].y - y);
+          if (d < bestD) {
+            bestD = d;
+            best = run;
+          }
+        }
+      }
+      if (!best) return null;
+      for (const p of best) claim(p);
+      return {
+        id: best[0].id,
+        row: best[0].row,
+        slot: best[0].slot,
+        slots: best.length,
+        x: DCP.Util.round(DCP.Util.sum(best, (p) => p.x) / best.length, 3),
+        y: best[0].y,
+        facing: best[0].facing,
+      };
     };
 
     /* --------------------------------------------- 7. cooling + power ---- */
-    const ctx = { design, floor, racks, takeFreePosition };
+    const ctx = { design, floor, racks, takeFreePosition, takeFreeRun };
     const cooling = DCP.Cooling.plan(ctx);
     cooling.notes.forEach((n) => warnings.push(n));
     const power = DCP.Power.plan({ ...ctx, cooling });
     power.notes.forEach((n) => warnings.push(n));
 
+    // How many PDUs a rack needs depends on its kW, which depends on the
+    // elevation -- so the PDUs can only be seated once power has sized them. A
+    // 0U strip changes nothing; a horizontal unit takes real U, and on a 100 kW
+    // rack that is three units per side.
+    seatRackPdus(racks, power, deviceIndex);
+
     /* --------------------------------------------- 8. routing ------------ */
     const graph = DCP.Pathways.build(floor, design);
-    const equipment = [...cooling.units, ...power.ups, ...power.entrances, ...power.distribution];
+    const equipment = [
+      ...cooling.units, ...power.entrances, ...power.switchboards,
+      ...power.ups, ...power.distribution,
+    ];
 
     for (const rack of racks) {
       if (rack.x === undefined) continue;
@@ -302,6 +408,12 @@
     }
 
     /* --------------------------------------------- 9. rollups ------------ */
+    // The objective priced every link off `dist` before any of it was routed.
+    // Now that the router has run for real, check the two agree: a non-zero
+    // residual means congestion pushed cables off the shortest path and the
+    // media classes the solver assumed are no longer the ones being bought.
+    const calibration = measureResidual(cables, racks, floor, dist, slack2);
+
     const model = {
       design, floor, fleet, traffic, fabric, cooling, power, graph,
       racks, equipment, cables,
@@ -318,11 +430,42 @@
         },
         placement: {
           method: placement.method,
-          objective: DCP.Util.round(placement.cost, 6),
-          baseline_objective: DCP.Util.round(placement.baseline, 6),
-          improvement_pct: pct(placement.baseline, placement.cost),
-          traffic_weight: wTraffic,
-          cable_weight: DCP.Util.round(wCable, 3),
+          // Predicted, in the units the invoice arrives in.
+          cost_usd: DCP.Util.round(placement.terms.material_usd, 0),
+          length_m: DCP.Util.round(placement.terms.length_m, 1),
+          baseline_cost_usd: DCP.Util.round(placement.baseline.material_usd, 0),
+          baseline_length_m: DCP.Util.round(placement.baseline.length_m, 1),
+          cost_improvement_pct: pct(placement.baseline.material_usd, placement.terms.material_usd),
+          length_improvement_pct: pct(placement.baseline.length_m, placement.terms.length_m),
+          // What placement can and cannot reach. `leverage_usd` is the width of
+          // the whole achievable range: when it is 0 the arrangement of racks
+          // provably cannot change what the cable costs, and the report should
+          // point at the fabric architecture instead of at the annealer.
+          leverage_usd: leverage ? DCP.Util.round(leverage.leverage_usd, 0) : 0,
+          fixed_usd: leverage ? DCP.Util.round(leverage.fixed_usd, 0) : 0,
+          movable_usd: leverage ? DCP.Util.round(leverage.movable_usd, 0) : 0,
+          lower_bound_usd: leverage ? DCP.Util.round(leverage.lower_usd, 0) : 0,
+          gap_pct: leverage ? pct(placement.terms.material_usd, leverage.lower_usd) : 0,
+          pinned_groups: leverage ? leverage.pinned_groups : 0,
+          movable_groups: leverage ? leverage.movable_groups : 0,
+          unreachable_links: leverage ? leverage.unreachable_links : 0,
+          span_m: leverage
+            ? [DCP.Util.round(leverage.near_m, 2), DCP.Util.round(leverage.far_m, 2)]
+            : [0, 0],
+          // What shortening every run would be worth -- fixed overhead is the
+          // lever when geometry is not.
+          unlock: unlock.map((u) => ({
+            delta_m: u.delta_m,
+            saving_usd: DCP.Util.round(u.saving_usd, 0),
+            links_reclassed: u.links_reclassed,
+          })),
+          traffic_weight: design.optimizer.objective_traffic_weight ?? OBJ_TRAFFIC,
+          traffic_moment_gbps_m: DCP.Util.round(placement.terms.traffic_moment, 1),
+          traffic_price_usd_per_gbps_m: DCP.Util.round(placement.lambda, 6),
+          pull_usd: DCP.Util.round(placement.terms.pull_usd, 0),
+          link_groups: linkGroups.length,
+          flow_groups: flowGroups.length,
+          calibration,
           ...placement.stats,
         },
         routing: {
@@ -347,20 +490,52 @@
 
   /* ------------------------------------------------------------ helpers -- */
 
-  function keyRack(key) {
-    return key && key.startsWith("rack:") ? key.slice(5) : null;
-  }
-
   function mapAssignment(assignment, fleet) {
     const out = {};
     for (const s of fleet.servers) out[s.index] = assignment.get(s.index);
     return out;
   }
 
-  function sumMatrix(M) {
-    let s = 0;
-    for (const row of M) for (const v of row) s += v;
-    return s;
+  /**
+   * Predicted length vs routed length, over every cable the objective priced.
+   *
+   * The prediction assumes empty trays, because congestion is a consequence of a
+   * layout that has not been chosen yet. That assumption is good until the trays
+   * fill up and A* starts taking the long way round, so it is measured rather
+   * than trusted: `media_mismatch` counts the cables whose real length landed on
+   * a different rung of the reach ladder than the solver assumed, which is the
+   * number that actually invalidates an objective.
+   */
+  function measureResidual(cables, racks, floor, dist, slack2) {
+    const posIdx = new Map(floor.positions.map((p, i) => [p.id, i]));
+    const rackPos = new Map();
+    for (const r of racks) if (r.position !== undefined) rackPos.set(r.name, posIdx.get(r.position));
+
+    let n = 0;
+    let sumAbs = 0;
+    let maxAbs = 0;
+    let mismatch = 0;
+
+    for (const c of cables) {
+      if (c.in_rack || !c.speed_gbps) continue;
+      const pa = rackPos.get(c.a && c.a.rack);
+      const pb = rackPos.get(c.b && c.b.rack);
+      if (pa === undefined || pb === undefined || pa === pb) continue;
+
+      const predicted = dist.D[pa][pb] + slack2;
+      const err = Math.abs(predicted - c.length_m);
+      n++;
+      sumAbs += err;
+      if (err > maxAbs) maxAbs = err;
+      if (DCP.Cost.stepKey(DCP.Cost.reachSteps(c.speed_gbps), predicted) !== c.media) mismatch++;
+    }
+
+    return {
+      cables: n,
+      mean_error_m: DCP.Util.round(n ? sumAbs / n : 0, 3),
+      max_error_m: DCP.Util.round(maxAbs, 3),
+      media_mismatch: mismatch,
+    };
   }
 
   function pct(base, now) {
@@ -421,6 +596,46 @@
   }
 
   /**
+   * Seat horizontal rack PDUs into the elevation.
+   *
+   * 0U strips clip to the rail and are left alone -- they are already counted as
+   * hardware, they just do not stand in a U. A horizontal unit does, so it is
+   * added as a device below the network block and the rack's U, weight and free
+   * space are recomputed. When the frame will not take them the count still goes
+   * up: the elevation is allowed to overflow so validate.js can say by how much,
+   * which is more useful than silently dropping a PDU the design needs.
+   */
+  function seatRackPdus(racks, power, deviceIndex) {
+    const byRack = DCP.Util.groupBy(power.rack_pdus.filter((p) => p.ru > 0), (p) => p.rack_id);
+    for (const rack of racks) {
+      const pdus = byRack.get(rack.id) || [];
+      rack.pdu_ru = DCP.Util.sum(pdus, (p) => p.ru);
+      if (!pdus.length) continue;
+
+      // Directly under the network block, descending, so patching stays at the
+      // top and the compute stack keeps the bottom of the frame.
+      let top = rack.top_free_u;
+      for (const pdu of pdus) {
+        const u = top - pdu.ru + 1;
+        pdu.u = u;
+        rack.devices.push({
+          name: pdu.name, sku: pdu.model, kind: "pdu", role: "pdu",
+          model: pdu.model_name || pdu.model,
+          u, ru: pdu.ru, kw: 0, weight_kg: pdu.weight_kg || 0,
+          feed: pdu.feed, amps: pdu.amps, class: "pdu",
+        });
+        if (deviceIndex) deviceIndex.set(pdu.name, { rackId: rack.id, u });
+        top -= pdu.ru;
+      }
+
+      rack.devices.sort((a, b) => b.u - a.u);
+      rack.u_used = DCP.Util.sum(rack.devices, (d) => d.ru);
+      rack.weight_kg = DCP.Util.round(rack.weight_kg + DCP.Util.sum(pdus, (p) => p.weight_kg || 0), 1);
+      rack.top_free_u = top;
+    }
+  }
+
+  /**
    * Intra-rack cables never touch a tray: they run up the vertical manager and
    * back, so the length is the U separation plus the trip out to the manager.
    * Dressing already includes the service loop, so no extra slack is added --
@@ -434,6 +649,14 @@
   }
 
   function routeAndFinish(design, graph, link, tier, opts = {}) {
+    // Connections inside a switchgear lineup run through the base of the
+    // assembly, not up to the ceiling tray. Routing them on the pathway graph
+    // would charge a 2 m bus link with a 3.8 m rise and a 3.8 m drop, so the
+    // caller states the span and it is taken as given.
+    if (link.fixed_length_m !== undefined) {
+      return finishCable(design, graph[tier], link,
+        { length_m: link.fixed_length_m, edges: [], bends: 0 }, null, { noSlack: true });
+    }
     if (link.in_rack || link.from_key === link.to_key) {
       return finishCable(design, graph[tier], link,
         { length_m: inRackLength(link, opts.deviceIndex || new Map()), edges: [], bends: 0 }, null,
@@ -483,6 +706,11 @@
 
     const spec = C.MEDIA[media] || C.POWER_MEDIA[media] || C.COOLANT_MEDIA[media];
     const od = spec ? spec.od_mm : 6;
+    // Optics are priced per link -- the transceiver pair dominates and the fiber
+    // is noise. Power conductor is the other way round: the copper is bought by
+    // the metre and is most of the bill, so a per-metre term is the only way a
+    // shorter feeder can show up as a cheaper one.
+    const cost = spec ? spec.cost_usd + (spec.cost_usd_per_m || 0) * length : 0;
     // Conduit-borne runs (service feeders) are routed for length but never
     // charged against tray fill.
     if (path.edges && path.edges.length && link.pathway !== "conduit") {
@@ -506,8 +734,18 @@
       in_rack: !!link.in_rack,
       pathway: link.pathway || (link.in_rack ? "in-rack" : "tray"),
       unroutable: !!link.unroutable,
+      // A run the ladder could not size, carried through so validation can name
+      // it instead of the schedule quietly shipping an under-rated circuit.
+      // `sizing_need` is preformatted in the units of whatever was being sized
+      // -- amps for a feeder, litres per minute for a hose -- so one check can
+      // report both without knowing which chain it is looking at.
+      undersized: !!link.undersized,
+      sizing_need: link.sizing_need,
+      flow_lpm: link.flow_lpm,
+      // Lineup-internal legs are bus inside one assembly, not a cable pull.
+      lineup: !!link.lineup,
       shared_segments_with_a: link.shared_segments_with_a,
-      cost_usd: spec ? spec.cost_usd : 0,
+      cost_usd: DCP.Util.round(cost, 0),
       path_segments: path.edges || [],
     };
   }

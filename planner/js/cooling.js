@@ -97,13 +97,32 @@
       // Doors still need a liquid-to-liquid interface to the facility loop.
       const cdu = C.CDU["cdu-perimeter-2500"];
       const cduCount = Math.max(1, Math.ceil(itLoadKw / cdu.kw)) + redundancySpares(cool.redundancy);
+
+      // These stand against the right-hand wall, which runs along y -- so the
+      // catalogue's width lies along the *wall* and its depth reaches into the
+      // room. Emitting the footprint unrotated put a 2.2 m frame across a 1.2 m
+      // perimeter strip: half a metre outside the building, and straight through
+      // the RPP zone. Everything downstream reads w_m as x and d_m as y, so the
+      // transpose belongs here, at the point where the unit is oriented.
+      const alongX = cdu.d_m;
+      const alongY = cdu.w_m;
+      if (design.room.perimeter_m < alongX) {
+        notes.push(`perimeter keep-clear ${design.room.perimeter_m} m is shallower than the ` +
+          `${alongX} m footprint of a perimeter CDU standing against the wall`);
+      }
+      const lane = design.room.depth_m / (cduCount + 1);
+      if (cduCount > 1 && lane < alongY) {
+        notes.push(`${cduCount} perimeter CDUs at ${DCP.Util.round(lane, 2)} m spacing cannot clear ` +
+          `their own ${alongY} m frames — lengthen the room or fit larger CDUs`);
+      }
       for (let i = 0; i < cduCount; i++) {
         units.push({
           id: `cdu${DCP.Util.pad(i + 1)}`, kind: "cdu", model: "cdu-perimeter-2500",
           name: `CDU-${DCP.Util.pad(i + 1)}`,
-          x: DCP.Util.round(design.room.width_m - design.room.perimeter_m / 2, 2),
-          y: DCP.Util.round(((i + 1) / (cduCount + 1)) * design.room.depth_m, 2),
-          w_m: cdu.w_m, d_m: cdu.d_m, kw_capacity: cdu.kw, kw_draw: cdu.kw * 0.02,
+          x: DCP.Util.round(design.room.width_m - alongX / 2, 2),
+          y: DCP.Util.round((i + 1) * lane, 2),
+          w_m: alongX, d_m: alongY, kw_capacity: cdu.kw, kw_draw: cdu.kw * 0.02,
+          lpm: cdu.lpm,
           weight_kg: cdu.weight_kg, serves: racks.map((r) => r.id), in_row: false,
         });
       }
@@ -128,15 +147,21 @@
       const group = groups[Math.min(i, groups.length - 1)] || [];
       const cx = group.length ? DCP.Util.sum(group, (r) => r.x) / group.length : floor.usable.x0;
       const cy = group.length ? DCP.Util.sum(group, (r) => r.y) / group.length : floor.usable.y0;
-      const pos = ctx.takeFreePosition(cx, cy);
+      // A 900 mm CDU does not fit a 750 mm slot: claim as many adjacent slots as
+      // its frame actually needs, or say so.
+      const pos = ctx.takeFreeRun(cx, cy, cdu.w_m);
       if (!pos) {
-        notes.push(`no free floor position for CDU ${i + 1} — the room is full; grow the room or raise racks_per_cdu`);
+        const slots = Math.max(1, Math.ceil(cdu.w_m / floor.pitch - 1e-9));
+        notes.push(`no free run of ${slots} adjacent floor position${slots > 1 ? "s" : ""} for CDU ${i + 1} ` +
+          `(${cdu.w_m} m wide in a ${DCP.Util.round(floor.pitch, 2)} m row pitch) — ` +
+          `grow the room or raise racks_per_cdu`);
         continue;
       }
       units.push({
         id: `cdu${DCP.Util.pad(i + 1)}`, kind: "cdu", model: cool.cdu_model,
         name: `CDU-${DCP.Util.pad(i + 1)}`, x: pos.x, y: pos.y, position: pos.id,
         w_m: cdu.w_m, d_m: cdu.d_m, kw_capacity: cdu.kw, kw_draw: cdu.kw * 0.02,
+        lpm: cdu.lpm,
         weight_kg: cdu.weight_kg, in_row: true,
         serves: (i < groups.length ? groups[i] : group).map((r) => r.id),
       });
@@ -184,6 +209,24 @@
     const { units, design, racks, ctx } = state;
     const C = DCP.Catalog;
     const runs = [];
+    const deltaT = design.cooling.return_c - design.cooling.supply_c;
+
+    /**
+     * Size a run from the flow it actually carries and carry the verdict with it.
+     *
+     * The room models one supply/return pair, so the primary loop is sized at
+     * the same ΔT as the secondary. That understates a real facility loop, which
+     * usually runs wider and therefore cooler in flow -- so the pipe picked here
+     * is conservative rather than optimistic, which is the right way round.
+     */
+    const sized = (lpm, kind) => {
+      const s = C.sizeCoolantMedia(lpm, kind);
+      if (!s.fits) {
+        state.notes.push(`no ${kind} carries ${DCP.Util.round(lpm, 0)} L/min at ΔT ${deltaT} K — ` +
+          `sized up to ${s.key} and still short; widen ΔT or split the run`);
+      }
+      return s;
+    };
 
     const cdus = units.filter((u) => u.kind === "cdu");
     const liquid = state.mode === "water";
@@ -202,14 +245,21 @@
           }, null)?.u;
         }
         if (!cdu) continue;
-        const media = rack.kw > 60 ? "hose-dn50" : "hose-dn32";
+        // A rack drop carries that rack's heat at the room's ΔT. Nothing else
+        // decides the bore -- least of all its kW on its own, which is only half
+        // the equation.
+        const lpm = C.flowLpm(rack.kw, deltaT);
+        const s = sized(lpm, "hose");
         const port = (manifoldPort.get(cdu.id) || 0) + 1;
         manifoldPort.set(cdu.id, port);
         for (const side of ["S", "R"]) {
           runs.push({
             label: `CW-${side}-${rack.name}`,
             class: "coolant",
-            media,
+            media: s.key,
+            undersized: !s.fits,
+            sizing_need: `${DCP.Util.round(lpm, 0)} L/min at ΔT ${deltaT} K`,
+            flow_lpm: DCP.Util.round(lpm, 1),
             a: { device: rackEnd(units, rack), port: side === "S" ? "supply" : "return", rack: rack.name },
             b: { device: cdu.name, port: `secondary-${side === "S" ? "supply" : "return"}-${port}`, rack: cdu.name },
             from_key: `rack:${rack.id}`,
@@ -220,15 +270,27 @@
     }
 
     // Facility (primary) loop into every CDU / CRAH, one header tap each.
+    //
+    // A header tap is permanent and the unit behind it can be driven to
+    // nameplate, so it is sized to the unit's rated flow rather than to whatever
+    // load happens to sit on it today. The CDU catalog already carries that
+    // rating; a CRAH does not, so its flow comes from its capacity and the room
+    // ΔT. Every tap used to be DN100 regardless, which fits an in-row CDU
+    // exactly and leaves a perimeter CDU at twice its pipe.
     let headerTap = 0;
     for (const u of units) {
       if (u.kind !== "cdu" && u.kind !== "crah") continue;
       headerTap++;
+      const lpm = u.lpm || C.flowLpm(u.kw_capacity, deltaT);
+      const s = sized(lpm, "pipe");
       for (const side of ["S", "R"]) {
         runs.push({
           label: `CF-${side}-${u.name}`,
           class: "coolant",
-          media: "pipe-dn100",
+          media: s.key,
+          undersized: !s.fits,
+          sizing_need: `${DCP.Util.round(lpm, 0)} L/min`,
+          flow_lpm: DCP.Util.round(lpm, 1),
           a: { device: u.name, port: side === "S" ? "primary-supply" : "primary-return", rack: u.name },
           b: { device: "facility-loop", port: `${side === "S" ? "supply" : "return"}-header-${headerTap}`, rack: "facility" },
           from_key: `equip:${u.id}`,
@@ -256,11 +318,10 @@
       supply_c: design.cooling.supply_c,
       return_c: design.cooling.return_c,
       delta_t: design.cooling.return_c - design.cooling.supply_c,
-      // Rough secondary-loop flow at the modeled ΔT: Q = m·cp·ΔT, water cp ≈ 4.19 kJ/kg·K
+      // Secondary-loop flow at the modeled ΔT, from the same helper that sizes
+      // the hose -- one definition, so the schedule and the summary agree.
       flow_lpm: DCP.Util.round(
-        state.mode === "water"
-          ? (state.itLoadKw * 60) / (4.19 * Math.max(1, design.cooling.return_c - design.cooling.supply_c))
-          : 0, 1),
+        state.mode === "water" ? C.flowLpm(state.itLoadKw, deltaT) : 0, 1),
       redundancy: design.cooling.redundancy,
       containment: design.cooling.containment,
     };

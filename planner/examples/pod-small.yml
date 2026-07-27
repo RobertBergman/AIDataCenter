@@ -32,8 +32,8 @@ room:
   row_pitch_m: 0.75
   row_depth_m: 1.2
   rows: 2
-  slots_per_row: 6
-  rack_positions: 12
+  slots_per_row: 4
+  rack_positions: 8
   positions_used: 4
   floor_capacity_kg_m2: 1220
   pathways:
@@ -54,32 +54,35 @@ cooling:
   return_c: 45
   delta_t_k: 13
   secondary_flow_lpm: 241.1
+  sizing_basis: flow at the modeled ΔT; header taps sized to unit rated flow
   units:
     - name: CDU-01
       kind: cdu
       model: cdu-inrow-1300
       capacity_kw: 1300
+      rated_flow_lpm: 1200
       draw_kw: 26
-      x_m: 8.525
-      y_m: 6
-      position: p1-5
+      x_m: 7.85
+      y_m: 3.6
+      position: p0-2
       serves: 4
     - name: CDU-02
       kind: cdu
       model: cdu-inrow-1300
       capacity_kw: 1300
+      rated_flow_lpm: 1200
       draw_kw: 26
-      x_m: 4.775
+      x_m: 7.85
       y_m: 6
-      position: p1-0
+      position: p1-2
       serves: 4
     - name: MANIFOLD-GPU-01
       kind: manifold
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 7.025
-      y_m: 6
+      x_m: 6.725
+      y_m: 3.6
       mounted_on: r1
       serves: 1
     - name: MANIFOLD-GPU-02
@@ -87,8 +90,8 @@ cooling:
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 6.275
-      y_m: 6
+      x_m: 5.975
+      y_m: 3.6
       mounted_on: r2
       serves: 1
     - name: MANIFOLD-NET-01
@@ -96,7 +99,7 @@ cooling:
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 5.525
+      x_m: 6.725
       y_m: 6
       mounted_on: r3
       serves: 1
@@ -105,7 +108,7 @@ cooling:
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 7.775
+      x_m: 5.975
       y_m: 6
       mounted_on: r4
       serves: 1
@@ -127,7 +130,7 @@ power:
       volts: 415
       phases: 3
       x_m: 0
-      y_m: 3.33
+      y_m: 3.6
     - name: SVC-B
       feed: B
       side: west
@@ -135,7 +138,32 @@ power:
       volts: 415
       phases: 3
       x_m: 0
-      y_m: 6.67
+      y_m: 4.7
+  switchboards:
+    - name: SWBD-A
+      feed: A
+      model: swbd-1200a
+      amps: 1200
+      capacity_kw: 690
+      sections: 3
+      maintenance_bypass: false
+      bypass_rating_kw: 218.9
+      downstream_kw: 218.9
+      lineup_length_m: 2.4
+      x_m: 2.1
+      y_m: 3.6
+    - name: SWBD-B
+      feed: B
+      model: swbd-1200a
+      amps: 1200
+      capacity_kw: 690
+      sections: 3
+      maintenance_bypass: false
+      bypass_rating_kw: 218.9
+      downstream_kw: 218.9
+      lineup_length_m: 2.4
+      x_m: 4.1
+      y_m: 4.7
   ups:
     model: ups-500
     redundancy: N+1
@@ -148,31 +176,37 @@ power:
         kva: 500
         usable_kw: 475
         spare: false
-        x_m: 2.5
-        y_m: 2
+        board: swbd-A
+        x_m: 2.1
+        y_m: 5.5
       - name: UPS-A2
         feed: A
         kva: 500
         usable_kw: 475
         spare: true
-        x_m: 2.5
-        y_m: 4
+        board: swbd-A
+        x_m: 2.1
+        y_m: 6.7
       - name: UPS-B1
         feed: B
         kva: 500
         usable_kw: 475
         spare: false
-        x_m: 2.5
-        y_m: 6
+        board: swbd-B
+        x_m: 4.1
+        y_m: 6.6
       - name: UPS-B2
         feed: B
         kva: 500
         usable_kw: 475
         spare: true
-        x_m: 2.5
-        y_m: 8
+        board: swbd-B
+        x_m: 4.1
+        y_m: 7.8
   distribution:
     method: rpp
+    siting: wall
+    slots_lost_to_spine: 0
     units:
       - name: RPP-A2
         kind: rpp
@@ -183,7 +217,7 @@ power:
         poles: 42
         poles_used: 24
         x_m: 10.2
-        y_m: 6
+        y_m: 4.8
         serves: 4
       - name: RPP-B1
         kind: rpp
@@ -194,7 +228,7 @@ power:
         poles: 42
         poles_used: 24
         x_m: 10.2
-        y_m: 6
+        y_m: 5.9
         serves: 4
   rack_pdus:
     - name: PDU-GPU-01-A1
@@ -202,6 +236,7 @@ power:
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -209,11 +244,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-01-A2
       rack: GPU-01
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -221,11 +259,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-01-A3
       rack: GPU-01
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -233,11 +274,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-01-B1
       rack: GPU-01
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -245,11 +289,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-01-B2
       rack: GPU-01
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -257,11 +304,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-01-B3
       rack: GPU-01
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -269,11 +319,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-02-A1
       rack: GPU-02
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -281,11 +334,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-02-A2
       rack: GPU-02
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -293,11 +349,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-02-A3
       rack: GPU-02
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -305,11 +364,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-02-B1
       rack: GPU-02
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -317,11 +379,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-02-B2
       rack: GPU-02
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -329,11 +394,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-GPU-02-B3
       rack: GPU-02
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -341,11 +409,14 @@ power:
       usable_kw: 34.5
       load_kw: 33.65
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-NET-01-A1
       rack: NET-01
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -353,11 +424,14 @@ power:
       usable_kw: 34.5
       load_kw: 10.85
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-NET-01-B1
       rack: NET-01
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -365,11 +439,14 @@ power:
       usable_kw: 34.5
       load_kw: 10.85
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-BOOT-01-A1
       rack: BOOT-01
       feed: A
       model: pdu-3ph-60a
       mount: "0U left rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -377,11 +454,14 @@ power:
       usable_kw: 34.5
       load_kw: 6.15
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
     - name: PDU-BOOT-01-B1
       rack: BOOT-01
       feed: B
       model: pdu-3ph-60a
       mount: "0U right rail"
+      ru: 0
       amps: 60
       volts: 415
       phases: 3
@@ -389,6 +469,8 @@ power:
       usable_kw: 34.5
       load_kw: 6.15
       outlets: 42
+      outlets_c13: 24
+      outlets_c19: 18
 fabric:
   architecture: rail-optimized
   description: NIC k of every GPU node lands on leaf k. Rail identity is a correctness constraint.
@@ -413,7 +495,7 @@ racks:
     layout: gpu-dlc-b300
     role: compute
     frame: { type: "750-52u", u_height: 52, width_m: 0.75, depth_m: 1.2 }
-    position: { row: 1, slot: 3, x_m: 7.025, y_m: 6, facing: south, pinned: false }
+    position: { row: 0, slot: 1, x_m: 6.725, y_m: 3.6, facing: north, pinned: false }
     totals: { u_used: 33, u_free: 19, kw: 100.95, gpus: 64, weight_kg: 978, pdus_per_side: 3 }
     elevation:
       - { u: 52, ru: 1, name: oob-gpu-01, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -429,7 +511,7 @@ racks:
     layout: gpu-dlc-b300
     role: compute
     frame: { type: "750-52u", u_height: 52, width_m: 0.75, depth_m: 1.2 }
-    position: { row: 1, slot: 2, x_m: 6.275, y_m: 6, facing: south, pinned: false }
+    position: { row: 0, slot: 0, x_m: 5.975, y_m: 3.6, facing: north, pinned: false }
     totals: { u_used: 33, u_free: 19, kw: 100.95, gpus: 64, weight_kg: 978, pdus_per_side: 3 }
     elevation:
       - { u: 52, ru: 1, name: oob-gpu-02, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -445,7 +527,7 @@ racks:
     layout: network-spine
     role: network
     frame: { type: "600-48u", u_height: 48, width_m: 0.6, depth_m: 1.2 }
-    position: { row: 1, slot: 1, x_m: 5.525, y_m: 6, facing: south, pinned: false }
+    position: { row: 1, slot: 1, x_m: 6.725, y_m: 6, facing: south, pinned: false }
     totals: { u_used: 19, u_free: 29, kw: 10.85, gpus: 0, weight_kg: 355, pdus_per_side: 1 }
     elevation:
       - { u: 48, ru: 1, name: oob-net-01, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -467,7 +549,7 @@ racks:
     layout: mgmt-boot
     role: mgmt
     frame: { type: "600-48u", u_height: 48, width_m: 0.6, depth_m: 1.2 }
-    position: { row: 1, slot: 4, x_m: 7.775, y_m: 6, facing: south, pinned: false }
+    position: { row: 1, slot: 0, x_m: 5.975, y_m: 6, facing: south, pinned: false }
     totals: { u_used: 13, u_free: 35, kw: 6.15, gpus: 0, weight_kg: 389, pdus_per_side: 1 }
     elevation:
       - { u: 48, ru: 1, name: oob-boot-01, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -1046,704 +1128,640 @@ cables:
   - label: R0-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R1-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R2-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R3-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R4-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R5-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R6-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R7-worker001
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker001, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet1, rack: NET-01 }
     status: planned
   - label: R0-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R1-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R2-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R3-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R4-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R5-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R6-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R7-worker002
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker002, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet2, rack: NET-01 }
     status: planned
   - label: R0-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R1-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R2-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R3-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R4-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R5-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R6-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R7-worker003
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker003, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet3, rack: NET-01 }
     status: planned
   - label: R0-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R1-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R2-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R3-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R4-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R5-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R6-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R7-worker004
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker004, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet4, rack: NET-01 }
     status: planned
   - label: R0-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R1-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R2-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R3-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R4-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R5-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R6-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R7-worker005
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker005, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet5, rack: NET-01 }
     status: planned
   - label: R0-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R1-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R2-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R3-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R4-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R5-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R6-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R7-worker006
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker006, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet6, rack: NET-01 }
     status: planned
   - label: R0-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R1-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R2-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R3-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R4-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R5-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R6-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R7-worker007
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker007, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet7, rack: NET-01 }
     status: planned
   - label: R0-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 0
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail0, rack: GPU-01 }
     b: { device: leaf-rail0, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R1-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 1
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail1, rack: GPU-01 }
     b: { device: leaf-rail1, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R2-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 2
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail2, rack: GPU-01 }
     b: { device: leaf-rail2, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R3-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 3
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail3, rack: GPU-01 }
     b: { device: leaf-rail3, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R4-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 4
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail4, rack: GPU-01 }
     b: { device: leaf-rail4, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R5-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 5
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail5, rack: GPU-01 }
     b: { device: leaf-rail5, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R6-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 6
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail6, rack: GPU-01 }
     b: { device: leaf-rail6, port: Ethernet8, rack: NET-01 }
     status: planned
   - label: R7-worker008
     class: fabric
     media: aoc-400g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 400
     rail: 7
     bundle: null
-    bends: 2
     a: { device: worker008, port: rail7, rack: GPU-01 }
     b: { device: leaf-rail7, port: Ethernet8, rack: NET-01 }
     status: planned
@@ -2454,7 +2472,7 @@ cables:
   - label: H0-mgmt001
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2465,7 +2483,7 @@ cables:
   - label: H1-mgmt001
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2476,7 +2494,7 @@ cables:
   - label: H0-mgmt002
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2487,7 +2505,7 @@ cables:
   - label: H1-mgmt002
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2498,7 +2516,7 @@ cables:
   - label: H0-mgmt003
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2509,7 +2527,7 @@ cables:
   - label: H1-mgmt003
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2520,7 +2538,7 @@ cables:
   - label: H0-mgmt004
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2531,7 +2549,7 @@ cables:
   - label: H1-mgmt004
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2542,7 +2560,7 @@ cables:
   - label: H0-mgmt005
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2553,7 +2571,7 @@ cables:
   - label: H1-mgmt005
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2564,7 +2582,7 @@ cables:
   - label: H0-mgmt006
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2575,7 +2593,7 @@ cables:
   - label: H1-mgmt006
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2586,7 +2604,7 @@ cables:
   - label: H0-mgmt007
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2597,7 +2615,7 @@ cables:
   - label: H1-mgmt007
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2608,7 +2626,7 @@ cables:
   - label: H0-mgmt008
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2619,7 +2637,7 @@ cables:
   - label: H1-mgmt008
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2630,7 +2648,7 @@ cables:
   - label: H0-mgmt009
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2641,7 +2659,7 @@ cables:
   - label: H1-mgmt009
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2652,7 +2670,7 @@ cables:
   - label: H0-mgmt010
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2663,7 +2681,7 @@ cables:
   - label: H1-mgmt010
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2674,7 +2692,7 @@ cables:
   - label: H0-mgmt011
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2685,7 +2703,7 @@ cables:
   - label: H1-mgmt011
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -2696,7 +2714,7 @@ cables:
   - label: H0-mgmt012
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 0
     bundle: null
@@ -2707,7 +2725,7 @@ cables:
   - label: H1-mgmt012
     class: fabric
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     rail: 1
     bundle: null
@@ -4878,27 +4896,25 @@ cables:
   - label: OOBU-oob-gpu-02-1
     class: oob
     media: aoc-100g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 25
     bundle: null
-    bends: 2
     a: { device: oob-gpu-02, port: Ethernet49, rack: GPU-02 }
     b: { device: oob-boot-01, port: Ethernet27, rack: BOOT-01 }
     status: planned
   - label: OOBU-oob-gpu-02-2
     class: oob
     media: aoc-100g
-    length_m: 8.1
+    length_m: 6.6
     speed_gbps: 25
     bundle: null
-    bends: 2
     a: { device: oob-gpu-02, port: Ethernet50, rack: GPU-02 }
     b: { device: oob-boot-01, port: Ethernet28, rack: BOOT-01 }
     status: planned
   - label: OOBU-oob-net-01-1
     class: oob
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     bundle: null
     bends: 2
@@ -4908,153 +4924,206 @@ cables:
   - label: OOBU-oob-net-01-2
     class: oob
     media: aoc-100g
-    length_m: 8.85
+    length_m: 7.35
     speed_gbps: 25
     bundle: null
     bends: 2
     a: { device: oob-net-01, port: Ethernet50, rack: NET-01 }
     b: { device: oob-boot-01, port: Ethernet30, rack: BOOT-01 }
     status: planned
-  - label: PE-A-UPS-A1
+  - label: PS-A-SWBD-A
     class: power
-    media: feeder-800a
-    length_m: 12.23
+    media: feeder-1200a
+    length_m: 3.1
     feed: A
     bundle: null
-    a: { device: SVC-A, port: section-1, rack: entrance }
+    a: { device: SVC-A, port: service, rack: entrance }
+    b: { device: SWBD-A, port: input, rack: electrical }
+    status: planned
+  - label: PU-A-UPS-A1-IN
+    class: power
+    media: bus-section-1600a
+    length_m: 2.9
+    feed: A
+    bundle: null
+    a: { device: SWBD-A, port: ups-in-1, rack: electrical }
     b: { device: UPS-A1, port: input, rack: electrical }
     status: planned
-  - label: PE-A-UPS-A2
+  - label: PU-A-UPS-A1-OUT
     class: power
-    media: feeder-800a
-    length_m: 13.17
+    media: bus-section-1600a
+    length_m: 2.9
     feed: A
     bundle: null
-    a: { device: SVC-A, port: section-2, rack: entrance }
+    a: { device: UPS-A1, port: output, rack: electrical }
+    b: { device: SWBD-A, port: ups-out-1, rack: electrical }
+    status: planned
+  - label: PU-A-UPS-A2-IN
+    class: power
+    media: bus-section-1600a
+    length_m: 4.1
+    feed: A
+    bundle: null
+    a: { device: SWBD-A, port: ups-in-2, rack: electrical }
     b: { device: UPS-A2, port: input, rack: electrical }
+    status: planned
+  - label: PU-A-UPS-A2-OUT
+    class: power
+    media: bus-section-1600a
+    length_m: 4.1
+    feed: A
+    bundle: null
+    a: { device: UPS-A2, port: output, rack: electrical }
+    b: { device: SWBD-A, port: ups-out-2, rack: electrical }
     status: planned
   - label: PF-A-RPP-A2
     class: power
     media: feeder-400a
-    length_m: 17.1
+    length_m: 14.7
     feed: A
     bundle: null
-    bends: 1
-    a: { device: UPS-A1, port: output-1, rack: electrical }
+    a: { device: SWBD-A, port: output-1, rack: electrical }
     b: { device: RPP-A2, port: main, rack: distribution }
     status: planned
   - label: PW-A1-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.98
+    length_m: 10.07
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-GPU-01-1, rack: distribution }
     b: { device: PDU-GPU-01-A1, port: input, rack: GPU-01 }
     status: planned
   - label: PW-A2-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.98
+    length_m: 10.07
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-GPU-01-2, rack: distribution }
     b: { device: PDU-GPU-01-A2, port: input, rack: GPU-01 }
     status: planned
   - label: PW-A3-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.98
+    length_m: 10.07
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-GPU-01-3, rack: distribution }
     b: { device: PDU-GPU-01-A3, port: input, rack: GPU-01 }
     status: planned
   - label: PW-A1-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 11.73
+    length_m: 10.83
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-GPU-02-1, rack: distribution }
     b: { device: PDU-GPU-02-A1, port: input, rack: GPU-02 }
     status: planned
   - label: PW-A2-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 11.73
+    length_m: 10.83
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-GPU-02-2, rack: distribution }
     b: { device: PDU-GPU-02-A2, port: input, rack: GPU-02 }
     status: planned
   - label: PW-A3-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 11.73
+    length_m: 10.83
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-GPU-02-3, rack: distribution }
     b: { device: PDU-GPU-02-A3, port: input, rack: GPU-02 }
     status: planned
   - label: PW-A1-NET-01
     class: power
     media: whip-3ph-60a
-    length_m: 12.48
+    length_m: 10.07
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-NET-01-1, rack: distribution }
     b: { device: PDU-NET-01-A1, port: input, rack: NET-01 }
     status: planned
   - label: PW-A1-BOOT-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.23
+    length_m: 10.83
     feed: A
     bundle: null
-    bends: 2
+    bends: 1
     a: { device: RPP-A2, port: breaker-BOOT-01-1, rack: distribution }
     b: { device: PDU-BOOT-01-A1, port: input, rack: BOOT-01 }
     status: planned
-  - label: PE-B-UPS-B1
+  - label: PS-B-SWBD-B
     class: power
-    media: feeder-800a
-    length_m: 13.97
+    media: feeder-1200a
+    length_m: 5.1
     feed: B
     bundle: null
-    a: { device: SVC-B, port: section-1, rack: entrance }
+    a: { device: SVC-B, port: service, rack: entrance }
+    b: { device: SWBD-B, port: input, rack: electrical }
+    status: planned
+  - label: PU-B-UPS-B1-IN
+    class: power
+    media: bus-section-1600a
+    length_m: 2.9
+    feed: B
+    bundle: null
+    a: { device: SWBD-B, port: ups-in-1, rack: electrical }
     b: { device: UPS-B1, port: input, rack: electrical }
     status: planned
-  - label: PE-B-UPS-B2
+  - label: PU-B-UPS-B1-OUT
     class: power
-    media: feeder-800a
-    length_m: 12.23
+    media: bus-section-1600a
+    length_m: 2.9
     feed: B
     bundle: null
-    a: { device: SVC-B, port: section-2, rack: entrance }
+    a: { device: UPS-B1, port: output, rack: electrical }
+    b: { device: SWBD-B, port: ups-out-1, rack: electrical }
+    status: planned
+  - label: PU-B-UPS-B2-IN
+    class: power
+    media: bus-section-1600a
+    length_m: 4.1
+    feed: B
+    bundle: null
+    a: { device: SWBD-B, port: ups-in-2, rack: electrical }
     b: { device: UPS-B2, port: input, rack: electrical }
+    status: planned
+  - label: PU-B-UPS-B2-OUT
+    class: power
+    media: bus-section-1600a
+    length_m: 4.1
+    feed: B
+    bundle: null
+    a: { device: UPS-B2, port: output, rack: electrical }
+    b: { device: SWBD-B, port: ups-out-2, rack: electrical }
     status: planned
   - label: PF-B-RPP-B1
     class: power
     media: feeder-400a
-    length_m: 15.5
+    length_m: 12.7
     feed: B
     bundle: null
     bends: 1
-    a: { device: UPS-B1, port: output-1, rack: electrical }
+    a: { device: SWBD-B, port: output-1, rack: electrical }
     b: { device: RPP-B1, port: main, rack: distribution }
     status: planned
   - label: PW-B1-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 11.58
+    length_m: 14.18
     feed: B
     bundle: null
     bends: 2
@@ -5064,7 +5133,7 @@ cables:
   - label: PW-B2-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 11.58
+    length_m: 14.18
     feed: B
     bundle: null
     bends: 2
@@ -5074,7 +5143,7 @@ cables:
   - label: PW-B3-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 11.58
+    length_m: 14.18
     feed: B
     bundle: null
     bends: 2
@@ -5084,7 +5153,7 @@ cables:
   - label: PW-B1-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 12.33
+    length_m: 14.93
     feed: B
     bundle: null
     bends: 2
@@ -5094,7 +5163,7 @@ cables:
   - label: PW-B2-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 12.33
+    length_m: 14.93
     feed: B
     bundle: null
     bends: 2
@@ -5104,7 +5173,7 @@ cables:
   - label: PW-B3-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 12.33
+    length_m: 14.93
     feed: B
     bundle: null
     bends: 2
@@ -5114,7 +5183,7 @@ cables:
   - label: PW-B1-NET-01
     class: power
     media: whip-3ph-60a
-    length_m: 13.08
+    length_m: 11.98
     feed: B
     bundle: null
     bends: 2
@@ -5124,7 +5193,7 @@ cables:
   - label: PW-B1-BOOT-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.83
+    length_m: 12.73
     feed: B
     bundle: null
     bends: 2
@@ -5133,121 +5202,138 @@ cables:
     status: planned
   - label: CW-S-GPU-01
     class: coolant
-    media: hose-dn50
-    length_m: 6.9
+    media: hose-dn32
+    length_m: 6.53
     bundle: null
     bends: 2
+    flow_lpm: 111.2
     a: { device: MANIFOLD-GPU-01, port: supply, rack: GPU-01 }
     b: { device: CDU-01, port: secondary-supply-1, rack: CDU-01 }
     status: planned
   - label: CW-R-GPU-01
     class: coolant
-    media: hose-dn50
-    length_m: 6.9
+    media: hose-dn32
+    length_m: 6.53
     bundle: null
     bends: 2
+    flow_lpm: 111.2
     a: { device: MANIFOLD-GPU-01, port: return, rack: GPU-01 }
     b: { device: CDU-01, port: secondary-return-1, rack: CDU-01 }
     status: planned
   - label: CW-S-GPU-02
     class: coolant
-    media: hose-dn50
-    length_m: 7.65
+    media: hose-dn32
+    length_m: 7.28
     bundle: null
     bends: 2
+    flow_lpm: 111.2
     a: { device: MANIFOLD-GPU-02, port: supply, rack: GPU-02 }
     b: { device: CDU-01, port: secondary-supply-2, rack: CDU-01 }
     status: planned
   - label: CW-R-GPU-02
     class: coolant
-    media: hose-dn50
-    length_m: 8.25
+    media: hose-dn32
+    length_m: 7.28
     bundle: null
     bends: 2
+    flow_lpm: 111.2
     a: { device: MANIFOLD-GPU-02, port: return, rack: GPU-02 }
     b: { device: CDU-01, port: secondary-return-2, rack: CDU-01 }
     status: planned
   - label: CW-S-NET-01
     class: coolant
-    media: hose-dn32
-    length_m: 8.4
+    media: hose-dn25
+    length_m: 6.53
     bundle: null
     bends: 2
+    flow_lpm: 12
     a: { device: MANIFOLD-NET-01, port: supply, rack: NET-01 }
     b: { device: CDU-01, port: secondary-supply-3, rack: CDU-01 }
     status: planned
   - label: CW-R-NET-01
     class: coolant
-    media: hose-dn32
-    length_m: 8.4
+    media: hose-dn25
+    length_m: 6.53
     bundle: null
     bends: 2
+    flow_lpm: 12
     a: { device: MANIFOLD-NET-01, port: return, rack: NET-01 }
     b: { device: CDU-01, port: secondary-return-3, rack: CDU-01 }
     status: planned
   - label: CW-S-BOOT-01
     class: coolant
-    media: hose-dn32
-    length_m: 6.15
+    media: hose-dn25
+    length_m: 7.28
     bundle: null
     bends: 2
+    flow_lpm: 6.8
     a: { device: MANIFOLD-BOOT-01, port: supply, rack: BOOT-01 }
     b: { device: CDU-01, port: secondary-supply-4, rack: CDU-01 }
     status: planned
   - label: CW-R-BOOT-01
     class: coolant
-    media: hose-dn32
-    length_m: 6.15
+    media: hose-dn25
+    length_m: 7.28
     bundle: null
     bends: 2
+    flow_lpm: 6.8
     a: { device: MANIFOLD-BOOT-01, port: return, rack: BOOT-01 }
     b: { device: CDU-01, port: secondary-return-4, rack: CDU-01 }
     status: planned
   - label: CF-S-CDU-01
     class: coolant
     media: pipe-dn100
-    length_m: 12.73
+    length_m: 12.05
     bundle: null
     bends: 1
+    flow_lpm: 1200
     a: { device: CDU-01, port: primary-supply, rack: CDU-01 }
     b: { device: facility-loop, port: supply-header-1, rack: facility }
     status: planned
   - label: CF-R-CDU-01
     class: coolant
     media: pipe-dn100
-    length_m: 12.73
+    length_m: 12.05
     bundle: null
     bends: 1
+    flow_lpm: 1200
     a: { device: CDU-01, port: primary-return, rack: CDU-01 }
     b: { device: facility-loop, port: return-header-1, rack: facility }
     status: planned
   - label: CF-S-CDU-02
     class: coolant
     media: pipe-dn100
-    length_m: 8.98
+    length_m: 14.65
     bundle: null
     bends: 1
+    flow_lpm: 1200
     a: { device: CDU-02, port: primary-supply, rack: CDU-02 }
     b: { device: facility-loop, port: supply-header-2, rack: facility }
     status: planned
   - label: CF-R-CDU-02
     class: coolant
     media: pipe-dn100
-    length_m: 11.58
+    length_m: 12.05
     bundle: null
     bends: 1
+    flow_lpm: 1200
     a: { device: CDU-02, port: primary-return, rack: CDU-02 }
     b: { device: facility-loop, port: return-header-2, rack: facility }
     status: planned
 media:
   aoc-100g: { name: AOC QSFP28 100G, max_m: 30, speed_gbps: 100, od_mm: 3, cost_usd: 420 }
   aoc-400g: { name: AOC QSFP-DD 400G, max_m: 30, speed_gbps: 400, od_mm: 3, cost_usd: 1450 }
+  bus-section-1600a: { name: Switchboard bus section + 1600A breaker, amps: 1600, od_mm: 130, cost_usd: 6900 }
   cat6a: { name: Cat6A copper, max_m: 90, speed_gbps: 10, od_mm: 6.5, cost_usd: 28 }
   dac-400g: { name: DAC QSFP-DD 400G, max_m: 3, speed_gbps: 400, od_mm: 8.4, cost_usd: 260 }
-  feeder-400a: { name: "400A 415V feeder", amps: 400, od_mm: 58, cost_usd: 4200 }
-  feeder-800a: { name: "800A 415V feeder", amps: 800, od_mm: 78, cost_usd: 7600 }
+  feeder-1200a:
+    name: "1200A 415V feeder (4× 500 kcmil per phase)"
+    amps: 1200
+    od_mm: 104
+    cost_usd: 11400
+  feeder-400a: { name: "400A 415V feeder (2× 3/0 Cu per phase)", amps: 400, od_mm: 58, cost_usd: 4200 }
+  hose-dn25: { name: DN25 EPDM coolant hose, dn: 25, od_mm: 38, cost_usd: 160 }
   hose-dn32: { name: DN32 EPDM coolant hose, dn: 32, od_mm: 46, cost_usd: 210 }
-  hose-dn50: { name: DN50 coolant hose, dn: 50, od_mm: 66, cost_usd: 340 }
   pipe-dn100: { name: DN100 facility loop pipe, dn: 100, od_mm: 114, cost_usd: 900 }
   whip-3ph-60a: { name: "60A 415V 3ph whip (IEC 60309)", amps: 60, od_mm: 21, cost_usd: 340 }
 bundles: []
@@ -5262,8 +5348,11 @@ labels:
     MGMT-{device}: server mgmt0 → OOB switch
     MA1-{device}: switch Management1 → OOB switch (ZTP)
     OOBU-{switch}-{n}: OOB switch uplink to OOB aggregation
-    PE-{feed}-{ups}: utility entrance → UPS
-    PF-{feed}-{unit}: UPS → RPP or busway
+    PS-{feed}-{board}: utility entrance → switchboard input (one per feed)
+    PU-{feed}-{ups}-IN: switchboard bus → UPS module input (lineup-internal)
+    PU-{feed}-{ups}-OUT: UPS module output → switchboard output section
+    PB-{feed}-{board}: maintenance bypass wrap-around, input → output section
+    PF-{feed}-{unit}: switchboard output → RPP or busway
     PW-{feed}{n}-{rack}: RPP breaker → rack PDU whip
     PT-{feed}{n}-{rack}: busway tap-off → rack PDU
     PC-{feed}-{device}-P{n}: rack PDU outlet → device PSU
@@ -5273,12 +5362,35 @@ optimization:
   partition: { enabled: true, levels: 2, cut_gbps: 8, baseline_cut_gbps: 8, improvement_pct: 0, internal_gbps: 5480 }
   placement:
     method: anneal
-    objective: 0.578
-    baseline_objective: 0.646
-    improvement_pct: 10.5
+    cost_usd: 198200
+    length_m: 1111.8
+    baseline_cost_usd: 198200
+    baseline_length_m: 1213.8
+    cost_improvement_pct: 0
+    length_improvement_pct: 8.4
+    leverage_usd: 0
+    fixed_usd: 198200
+    movable_usd: 0
+    lower_bound_usd: 198200
+    gap_pct: 0
+    pinned_groups: 5
+    movable_groups: 0
+    unreachable_links: 0
+    span_m:
+      - 6.6
+      - 8.85
+    unlock:
+      - { delta_m: 2, saving_usd: 49300, links_reclassed: 66 }
+      - { delta_m: 3, saving_usd: 107180, links_reclassed: 158 }
     traffic_weight: 0.5
-    cable_weight: 0.5
-    accepted: 9715
+    traffic_moment_gbps_m: 122.4
+    traffic_price_usd_per_gbps_m: 13.167
+    pull_usd: 2224
+    link_groups: 5
+    flow_groups: 3
+    calibration: { cables: 158, mean_error_m: 0, max_error_m: 0, media_mismatch: 0 }
+    seed: greedy
+    accepted: 13378
     iters: 24000
   routing:
     method: astar
@@ -5286,12 +5398,12 @@ optimization:
     bend_penalty_m: 1.5
     data_tray:
       peak_fill: 0.045
-      mean_fill: 0.003
+      mean_fill: 0.002
       over_fill_segments: 0
       hottest: []
     power_tray:
       peak_fill: 0.115
-      mean_fill: 0.02
+      mean_fill: 0.022
       over_fill_segments: 0
       hottest: []
   bundling: { enabled: true, trunks: 0, trunk_length_m: 0 }
@@ -5300,26 +5412,27 @@ totals:
   gpus: 128
   servers: 28
   switches: 18
-  cables: 422
-  cable_length_m: 2111.5
-  cable_cost_usd: 291800
+  cables: 428
+  cable_length_m: 1963.3
+  cable_cost_usd: 391525
   cables_by_class:
-    fabric: { count: 312, length_m: 1485.6, cost_usd: 237280 }
-    oob: { count: 34, length_m: 136.2, cost_usd: 3304 }
+    fabric: { count: 312, length_m: 1353.6, cost_usd: 237280 }
+    oob: { count: 34, length_m: 130.2, cost_usd: 3304 }
     mgmt: { count: 42, length_m: 114.2, cost_usd: 1176 }
-    power: { count: 22, length_m: 270.7, cost_usd: 44240 }
-    coolant: { count: 12, length_m: 104.8, cost_usd: 5800 }
+    power: { count: 28, length_m: 259.2, cost_usd: 129457 }
+    coolant: { count: 12, length_m: 106, cost_usd: 20308 }
   cables_by_media:
-    aoc-400g: { count: 128, length_m: 988.8, cost_usd: 185600 }
-    aoc-100g: { count: 30, length_m: 261, cost_usd: 12600 }
+    aoc-400g: { count: 128, length_m: 892.8, cost_usd: 185600 }
+    aoc-100g: { count: 30, length_m: 219, cost_usd: 12600 }
     dac-400g: { count: 160, length_m: 284.4, cost_usd: 41600 }
     cat6a: { count: 70, length_m: 201.8, cost_usd: 1960 }
-    feeder-800a: { count: 4, length_m: 51.6, cost_usd: 30400 }
-    feeder-400a: { count: 2, length_m: 32.6, cost_usd: 8400 }
-    whip-3ph-60a: { count: 16, length_m: 186.5, cost_usd: 5440 }
-    hose-dn50: { count: 4, length_m: 29.7, cost_usd: 1360 }
-    hose-dn32: { count: 4, length_m: 29.1, cost_usd: 840 }
-    pipe-dn100: { count: 4, length_m: 46, cost_usd: 3600 }
+    feeder-1200a: { count: 2, length_m: 8.2, cost_usd: 30836 }
+    bus-section-1600a: { count: 8, length_m: 28, cost_usd: 64160 }
+    feeder-400a: { count: 2, length_m: 27.4, cost_usd: 16894 }
+    whip-3ph-60a: { count: 16, length_m: 195.6, cost_usd: 17567 }
+    hose-dn32: { count: 4, length_m: 27.6, cost_usd: 2552 }
+    hose-dn25: { count: 4, length_m: 27.6, cost_usd: 1964 }
+    pipe-dn100: { count: 4, length_m: 50.8, cost_usd: 15792 }
   it_load_kw: 218.9
   facility_load_kw: 273.6
   power_density_kw_m2: 1.82
@@ -5329,11 +5442,11 @@ totals:
   rack_pdus: 16
   weight_kg: 2700
   room_area_m2: 120
-  rack_positions: 12
+  rack_positions: 8
 validation:
   ok: true
   errors: 0
-  warnings: 2
+  warnings: 5
   items:
     - severity: warn
       code: room.floor_load
@@ -5347,3 +5460,15 @@ validation:
       code: cooling.residual_air
       subject: cooling
       message: direct-liquid still leaves 21.9 kW to the air path (PSUs, DIMMs, NICs) — the room still needs air handling
+    - severity: warn
+      code: power.bypass
+      subject: SWBD-A
+      message: SWBD-A has no maintenance bypass — the UPS cannot be taken out of the path for service without dropping the whole A feed
+    - severity: warn
+      code: power.bypass
+      subject: SWBD-B
+      message: SWBD-B has no maintenance bypass — the UPS cannot be taken out of the path for service without dropping the whole B feed
+    - severity: warn
+      code: build.note
+      subject: null
+      message: electrical plant needs 2 columns (9.8 m of lineup against 7.6 m of wall) — the strip was widened to 3.8 m, taking floor from the rack block

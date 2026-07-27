@@ -116,8 +116,11 @@
     "MGMT-{device}": "server mgmt0 → OOB switch",
     "MA1-{device}": "switch Management1 → OOB switch (ZTP)",
     "OOBU-{switch}-{n}": "OOB switch uplink to OOB aggregation",
-    "PE-{feed}-{ups}": "utility entrance → UPS",
-    "PF-{feed}-{unit}": "UPS → RPP or busway",
+    "PS-{feed}-{board}": "utility entrance → switchboard input (one per feed)",
+    "PU-{feed}-{ups}-IN": "switchboard bus → UPS module input (lineup-internal)",
+    "PU-{feed}-{ups}-OUT": "UPS module output → switchboard output section",
+    "PB-{feed}-{board}": "maintenance bypass wrap-around, input → output section",
+    "PF-{feed}-{unit}": "switchboard output → RPP or busway",
     "PW-{feed}{n}-{rack}": "RPP breaker → rack PDU whip",
     "PT-{feed}{n}-{rack}": "busway tap-off → rack PDU",
     "PC-{feed}-{device}-P{n}": "rack PDU outlet → device PSU",
@@ -184,11 +187,15 @@
       return_c: cooling.return_c,
       delta_t_k: cooling.delta_t,
       secondary_flow_lpm: cooling.flow_lpm,
+      // Hose and pipe are selected from these, not from a kW threshold: the same
+      // rack needs a bigger bore as ΔT narrows, and the bore is what gets bought.
+      sizing_basis: "flow at the modeled ΔT; header taps sized to unit rated flow",
       units: cooling.units.map((u) => ({
         name: u.name,
         kind: u.kind,
         model: u.model,
         capacity_kw: u.kw_capacity,
+        rated_flow_lpm: u.lpm,
         draw_kw: R(u.kw_draw, 2),
         x_m: u.x,
         y_m: u.y,
@@ -211,6 +218,19 @@
         capacity_kw: e.capacity_kw, volts: e.volts, phases: e.phases,
         x_m: e.x, y_m: e.y,
       })),
+      // One lineup per feed. The service lands here once; the UPS modules tap
+      // its bus and the RPP breakers sit in its output section, so this is the
+      // single point that decides how many service feeders the room buys.
+      switchboards: (power.switchboards || []).map((s) => ({
+        name: s.name, feed: s.feed, model: s.model,
+        amps: s.amps, capacity_kw: s.capacity_kw,
+        sections: s.sections,
+        maintenance_bypass: s.bypass,
+        bypass_rating_kw: s.bypass_rating_kw,
+        downstream_kw: s.downstream_kw,
+        lineup_length_m: s.lineup_length_m,
+        x_m: s.x, y_m: s.y,
+      })),
       ups: {
         model: design.power.ups_model,
         redundancy: design.power.ups_redundancy,
@@ -219,11 +239,13 @@
         firm_capacity_per_feed_kw: power.totals.ups_firm_capacity_per_feed_kw,
         units: power.ups.map((u) => ({
           name: u.name, feed: u.feed, kva: u.kva, usable_kw: u.usable_kw,
-          spare: u.spare, x_m: u.x, y_m: u.y,
+          spare: u.spare, board: u.board, x_m: u.x, y_m: u.y,
         })),
       },
       distribution: {
         method: design.power.distribution,
+        siting: power.totals.rpp_siting,
+        slots_lost_to_spine: power.totals.slots_lost_to_spine,
         units: power.distribution.map((d) => ({
           name: d.name, kind: d.kind, feed: d.feed, model: d.model,
           capacity_kw: d.capacity_kw, load_kw: d.load_kw,
@@ -234,8 +256,10 @@
       },
       rack_pdus: power.rack_pdus.map((p) => ({
         name: p.name, rack: p.rack, feed: p.feed, model: p.model, mount: p.mount,
+        ru: p.ru, u: p.u,
         amps: p.amps, volts: p.volts, phases: p.phases,
-        kva: p.kva, usable_kw: p.usable_kw, load_kw: p.load_kw, outlets: p.outlets,
+        kva: p.kva, usable_kw: p.usable_kw, load_kw: p.load_kw,
+        outlets: p.outlets, outlets_c13: p.outlets_c13, outlets_c19: p.outlets_c19,
       })),
     };
 
@@ -305,6 +329,10 @@
       bundle: c.bundle,
       bends: c.bends || undefined,
       in_rack: c.in_rack || undefined,
+      // What the run has to carry, on the runs where that decided the media.
+      flow_lpm: c.flow_lpm || undefined,
+      undersized: c.undersized || undefined,
+      sizing_need: c.undersized ? c.sizing_need : undefined,
       a: c.a,
       b: c.b,
       status: "planned",

@@ -20,7 +20,7 @@ const path = require("path");
 
 const MODULES = [
   "util.js", "catalog.js", "design.js", "floor.js", "graph.js",
-  "partition.js", "placement.js", "pathways.js", "fabric.js",
+  "partition.js", "pathways.js", "cost.js", "placement.js", "fabric.js",
   "cooling.js", "power.js", "validate.js", "build.js", "yaml.js",
 ];
 
@@ -141,8 +141,25 @@ function printReport(model, ms) {
 
   console.log("\nOPTIMIZATION");
   line("partition cut", `${o.partition.cut_gbps} GB/s (baseline ${o.partition.baseline_cut_gbps}, −${o.partition.improvement_pct}%)`);
-  line("placement objective", `${o.placement.objective} (baseline ${o.placement.baseline_objective}, −${o.placement.improvement_pct}%)`);
-  line("placement method", `${o.placement.method}${o.placement.iters ? ` · ${o.placement.iters} iters · ${o.placement.accepted} accepted` : ""}`);
+  const p = o.placement;
+  const usd = (v) => `$${(v || 0).toLocaleString("en-US")}`;
+  line("placement method", `${p.method}${p.seed ? ` · ${p.seed} seed` : ""}${p.iters ? ` · ${p.iters} iters · ${p.accepted} accepted` : ""}`);
+  line("inter-rack media", `${usd(p.cost_usd)} (baseline ${usd(p.baseline_cost_usd)}, −${p.cost_improvement_pct}%)`);
+  line("routed length", `${p.length_m} m (baseline ${p.baseline_length_m} m, −${p.length_improvement_pct}%)`);
+  line("rack spacing range", `${p.span_m[0]}–${p.span_m[1]} m`);
+  line("locked by reach", `${usd(p.fixed_usd)} over ${p.pinned_groups} rack pairs`);
+  line("movable by layout", `${usd(p.movable_usd)} over ${p.movable_groups} rack pairs`);
+  line("placement leverage", `${usd(p.leverage_usd)} · gap to bound ${p.gap_pct}%`);
+  if (p.leverage_usd === 0) {
+    line("", "every inter-rack run sits on one rung of the reach ladder —");
+    line("", "no arrangement of racks can change what the optics cost");
+  }
+  for (const u of p.unlock) {
+    line(`  −${u.delta_m} m per link`, `would save ${usd(u.saving_usd)} (${u.links_reclassed} links reclassed)`);
+  }
+  if (p.calibration && p.calibration.cables) {
+    line("estimator error", `${p.calibration.mean_error_m} m mean · ${p.calibration.max_error_m} m max · ${p.calibration.media_mismatch} mispriced`);
+  }
   line("trunks (Steiner)", `${o.bundling.trunks} · ${o.bundling.trunk_length_m} m of shared pathway`);
   line("data tray fill", `peak ${(o.routing.data_tray.peak_fill * 100).toFixed(0)}% · mean ${(o.routing.data_tray.mean_fill * 100).toFixed(0)}%`);
   line("power tray fill", `peak ${(o.routing.power_tray.peak_fill * 100).toFixed(0)}% · mean ${(o.routing.power_tray.mean_fill * 100).toFixed(0)}%`);

@@ -123,12 +123,22 @@
               </select>
             </div>
           </div>
-          <div class="field">
-            <label for="distribution">Distribution</label>
-            <select id="distribution">
-              <option value="rpp">RPP panels (floor)</option>
-              <option value="busway">Overhead busway</option>
-            </select>
+          <div class="grid2">
+            <div class="field">
+              <label for="distribution">Distribution</label>
+              <select id="distribution">
+                <option value="rpp">RPP panels (floor)</option>
+                <option value="busway">Overhead busway</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rpp-siting">RPP siting</label>
+              <select id="rpp-siting">
+                <option value="auto">Auto — spine if the room affords it</option>
+                <option value="spine">Spine — inside the rack block</option>
+                <option value="wall">Wall — far side of the room</option>
+              </select>
+            </div>
           </div>
           <div class="grid2">
             <div class="field">
@@ -139,6 +149,9 @@
               <label for="rack-pdu">Rack PDU</label>
               <select id="rack-pdu"></select>
             </div>
+          </div>
+          <div class="field checkbox">
+            <label><input type="checkbox" id="maintenance-bypass" /> Maintenance bypass in the switchboard lineup</label>
           </div>
           <div class="field checkbox">
             <label><input type="checkbox" id="device-cords" /> Emit per-PSU cords in the schedule</label>
@@ -324,8 +337,9 @@
   <script src="js/floor.js"></script>
   <script src="js/graph.js"></script>
   <script src="js/partition.js"></script>
-  <script src="js/placement.js"></script>
   <script src="js/pathways.js"></script>
+  <script src="js/cost.js"></script>
+  <script src="js/placement.js"></script>
   <script src="js/fabric.js"></script>
   <script src="js/cooling.js"></script>
   <script src="js/power.js"></script>
