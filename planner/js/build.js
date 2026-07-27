@@ -40,7 +40,10 @@
 
   const EMPTY_TERMS = {
     material_usd: 0, pull_usd: 0, length_m: 0,
-    traffic_moment: 0, traffic_usd: 0, objective: 0,
+    traffic_moment: 0, traffic_usd: 0,
+    power_usd: 0, coolant_usd: 0,
+    maintenance_usd: 0, expansion_usd: 0, structural_usd: 0,
+    objective: 0,
   };
 
   function build(design) {
@@ -184,37 +187,166 @@
       if (p) pins[i] = floor.positions.indexOf(p);
     });
 
-    const problem = {
+    /* ------------------------------------------- 6a. pods + constraints -- */
+    // Both are placement *inputs*, so both are built before the solver runs. The
+    // pod carve depends only on the traffic graph and the room; the constraint
+    // tables depend on the pods. Neither depends on where racks end up, which is
+    // what lets them constrain that choice rather than comment on it.
+    const pods = DCP.Pod.plan({ design, floor, racks, flowGroups });
+    pods.notes.forEach((n) => warnings.push(n));
+    const constraints = DCP.Constraints.build({ design, floor, racks, pods });
+    constraints.notes.forEach((n) => warnings.push(n));
+
+    const problemBase = {
       n: racks.length,
       dist,
       positions: floor.positions,
       groups: linkGroups,
       flows: flowGroups,
       slack2,
+      constraints,
+      weights: design.optimizer.weights || {},
     };
 
+    const placeOpts = {
+      method: design.optimizer.placement,
+      seed: design.optimizer.seed,
+      iters: design.optimizer.anneal_iters,
+      t0: design.optimizer.anneal_start_t,
+      t1: design.optimizer.anneal_end_t,
+      traffic_weight: design.optimizer.objective_traffic_weight ?? OBJ_TRAFFIC,
+      pull_cost_usd_per_m: design.optimizer.pull_cost_usd_per_m ?? PULL_USD_PER_M,
+      pins,
+      frozen: Object.keys(pins).map(Number),
+    };
+
+    /* --------------------------------------- 6b. placement ⇄ utilities --- */
+    /**
+     * Placement and utility siting are mutually dependent, so they are solved as
+     * a fixed point rather than in one direction.
+     *
+     * The circularity is real and was previously resolved by ignoring it. A rack
+     * wants to sit near its CDU and its RPP; but cooling.js puts the CDU at the
+     * centroid of the racks it serves, and power.js homes each panel to the load
+     * it picks up. Place first and the utilities chase the racks; site first and
+     * there is nothing to site against.
+     *
+     * So: pass one prices the utilities against anchors estimated from the room's
+     * own geometry -- the RPP column's x, one notional CDU per `racks_per_cdu` of
+     * row. That is enough to place against. The gear is then sited for real,
+     * under its real capacity rules, and pass two re-places against where it
+     * actually went. Two or three passes is invariably enough, and the loop stops
+     * as soon as no rack moves.
+     *
+     * The per-pass record is kept and reported. A run that never settles is a
+     * result too -- it says the utility and fiber objectives are pulling against
+     * each other, which is worth knowing and worth showing.
+     */
+    const feeds = design.power.entrances >= 2 ? 2 : 1;
+    const roomFits = floor.positions.length >= racks.length && racks.length > 0;
+    if (!roomFits && racks.length) {
+      warnings.push(`room holds ${floor.positions.length} rack positions but the design has ${racks.length} racks`);
+    }
+
+    let usedPositions = new Set();
+    let freePositions = [];
+
+    /** Commit a placement to the racks and hand the leftovers to the utilities. */
+    function seatRacks(posOf) {
+      usedPositions = new Set();
+      racks.forEach((rack, i) => {
+        const pos = floor.positions[posOf[i]];
+        if (!pos) return;
+        rack.x = pos.x;
+        rack.y = pos.y;
+        rack.row = pos.row;
+        rack.slot = pos.slot;
+        rack.facing = pos.facing;
+        rack.position = pos.id;
+        usedPositions.add(pos.id);
+      });
+      // Rebuilt from scratch every pass: in-row CDUs claim floor positions, and
+      // a pass that inherited the previous pass's claims would be siting gear
+      // around ghosts of where it stood last time.
+      freePositions = floor.positions.filter((p) => !usedPositions.has(p.id));
+    }
+
     let placement = {
-      posOf: new Int32Array(racks.length), method: "none", lambda: 0, stats: {},
+      posOf: new Int32Array(racks.length), method: "none", lambda: 0, violations: 0, stats: {},
       terms: EMPTY_TERMS, baseline: EMPTY_TERMS,
     };
-    if (floor.positions.length >= racks.length && racks.length > 0) {
-      placement = DCP.Placement.place(problem, {
-        method: design.optimizer.placement,
-        seed: design.optimizer.seed,
-        iters: design.optimizer.anneal_iters,
-        t0: design.optimizer.anneal_start_t,
-        t1: design.optimizer.anneal_end_t,
-        traffic_weight: design.optimizer.objective_traffic_weight ?? OBJ_TRAFFIC,
-        pull_cost_usd_per_m: design.optimizer.pull_cost_usd_per_m ?? PULL_USD_PER_M,
-        pins,
-        frozen: Object.keys(pins).map(Number),
+    let cooling = null;
+    let power = null;
+    let service = null;
+    let anchors = DCP.Cost.estimateAnchors(floor, design);
+    const convergence = [];
+    const maxPasses = roomFits ? Math.max(1, design.optimizer.utility_passes ?? 3) : 1;
+
+    let best = null;
+    for (let pass = 1; pass <= maxPasses; pass++) {
+      const previous = pass > 1 ? Int32Array.from(placement.posOf) : null;
+
+      if (roomFits) {
+        service = DCP.Cost.serviceCosts({
+          racks, floor, design, feeds,
+          powerAnchors: anchors.power,
+          coolantAnchors: anchors.coolant,
+        });
+        placement = DCP.Placement.place({ ...problemBase, service }, placeOpts);
+      } else if (racks.length) {
+        racks.forEach((r, i) => {
+          placement.posOf[i] = Math.min(i, Math.max(0, floor.positions.length - 1));
+        });
+      }
+
+      seatRacks(placement.posOf);
+      const ctxPass = { design, floor, racks, pods, takeFreePosition, takeFreeRun };
+      cooling = DCP.Cooling.plan(ctxPass);
+      power = DCP.Power.plan({ ...ctxPass, cooling });
+
+      let moved = 0;
+      if (previous) {
+        for (let i = 0; i < placement.posOf.length; i++) {
+          if (previous[i] !== placement.posOf[i]) moved++;
+        }
+      }
+      convergence.push({
+        pass,
+        racks_moved: previous ? moved : null,
+        objective_usd: DCP.Util.round(placement.terms.objective, 0),
+        power_usd: DCP.Util.round(placement.terms.power_usd, 0),
+        coolant_usd: DCP.Util.round(placement.terms.coolant_usd, 0),
       });
-    } else if (racks.length) {
-      warnings.push(`room holds ${floor.positions.length} rack positions but the design has ${racks.length} racks`);
-      racks.forEach((r, i) => {
-        placement.posOf[i] = Math.min(i, Math.max(0, floor.positions.length - 1));
-      });
+
+      // Keep the best pass, not the last one. This iteration is not a
+      // contraction and is not guaranteed to be: moving racks toward the CDUs
+      // moves the CDUs, and the two can chase each other round a cycle. Holding
+      // on to the cheapest layout seen makes a non-converging run harmless --
+      // the same reason the annealer returns its best state rather than
+      // wherever the random walk happened to stop.
+      if (!best || placement.terms.objective < best.terms.objective - 1e-9) {
+        best = { pass, posOf: Int32Array.from(placement.posOf), terms: placement.terms, placement };
+      }
+      if (previous && moved === 0) break;
+
+      // Next pass prices against gear that now genuinely exists.
+      anchors = DCP.Cost.sitedAnchors(cooling, power);
     }
+
+    // Re-site the utilities against the pass actually being kept, so the CDUs and
+    // panels in the output belong to the layout in the output.
+    if (best && best.pass !== convergence.length) {
+      placement = best.placement;
+      seatRacks(best.posOf);
+      const ctxBest = { design, floor, racks, pods, takeFreePosition, takeFreeRun };
+      cooling = DCP.Cooling.plan(ctxBest);
+      power = DCP.Power.plan({ ...ctxBest, cooling });
+    }
+
+    // Only the surviving pass's notes are real; the earlier ones describe layouts
+    // that were discarded.
+    cooling.notes.forEach((n) => warnings.push(n));
+    power.notes.forEach((n) => warnings.push(n));
 
     // How much of the bill placement can move at all, and what it would take to
     // reach the next cheaper media class. See cost.js -- when a room sits inside
@@ -226,27 +358,15 @@
       ? DCP.Cost.unlockCurve(linkGroups, dist, placement.posOf, slack2)
       : [];
 
-    const usedPositions = new Set();
-    racks.forEach((rack, i) => {
-      const pos = floor.positions[placement.posOf[i]];
-      if (!pos) return;
-      rack.x = pos.x;
-      rack.y = pos.y;
-      rack.row = pos.row;
-      rack.slot = pos.slot;
-      rack.facing = pos.facing;
-      rack.position = pos.id;
-      usedPositions.add(pos.id);
-    });
-
-    const freePositions = floor.positions.filter((p) => !usedPositions.has(p.id));
-    const claim = (p) => {
+    // Declarations, not expressions: the fixed-point loop above calls these, and
+    // a `const` arrow would still be in its temporal dead zone at that point.
+    function claim(p) {
       const i = freePositions.indexOf(p);
       if (i >= 0) freePositions.splice(i, 1);
       usedPositions.add(p.id);
-    };
+    }
 
-    const takeFreePosition = (x, y) => {
+    function takeFreePosition(x, y) {
       if (!freePositions.length) return null;
       let best = null;
       let bestD = Infinity;
@@ -259,7 +379,7 @@
       }
       if (best) claim(best);
       return best;
-    };
+    }
 
     /**
      * Claim enough adjacent slots to actually seat something `width_m` wide.
@@ -271,7 +391,7 @@
      * it is the honest version, and it fails loudly when no run is wide enough
      * instead of quietly double-booking the floor.
      */
-    const takeFreeRun = (x, y, width_m) => {
+    function takeFreeRun(x, y, width_m) {
       const need = Math.max(1, Math.ceil(width_m / floor.pitch - 1e-9));
       if (need === 1) return takeFreePosition(x, y);
 
@@ -314,19 +434,17 @@
         y: best[0].y,
         facing: best[0].facing,
       };
-    };
+    }
 
-    /* --------------------------------------------- 7. cooling + power ---- */
-    const ctx = { design, floor, racks, takeFreePosition, takeFreeRun };
-    const cooling = DCP.Cooling.plan(ctx);
-    cooling.notes.forEach((n) => warnings.push(n));
-    const power = DCP.Power.plan({ ...ctx, cooling });
-    power.notes.forEach((n) => warnings.push(n));
-
+    /* --------------------------------------------- 7. rack PDUs ---------- */
     // How many PDUs a rack needs depends on its kW, which depends on the
     // elevation -- so the PDUs can only be seated once power has sized them. A
     // 0U strip changes nothing; a horizontal unit takes real U, and on a 100 kW
     // rack that is three units per side.
+    //
+    // Deliberately outside the fixed-point loop: it mutates the elevation, and
+    // running it once per pass would seat a fresh set of PDUs on top of the last
+    // pass's every time round.
     seatRackPdus(racks, power, deviceIndex);
 
     /* --------------------------------------------- 8. routing ------------ */
@@ -466,7 +584,67 @@
           link_groups: linkGroups.length,
           flow_groups: flowGroups.length,
           calibration,
+          // Every term the objective weighed, unweighted and in its own units,
+          // so the weighted total can be re-derived by hand from the report.
+          // A term that is large here and unchanged between baseline and result
+          // is one the room's geometry, not the solver, decided.
+          terms: {
+            cable_material_usd: DCP.Util.round(placement.terms.material_usd, 0),
+            cable_pull_usd: DCP.Util.round(placement.terms.pull_usd, 0),
+            power_whip_usd: DCP.Util.round(placement.terms.power_usd, 0),
+            coolant_hose_usd: DCP.Util.round(placement.terms.coolant_usd, 0),
+            maintenance_usd: DCP.Util.round(placement.terms.maintenance_usd, 0),
+            expansion_usd: DCP.Util.round(placement.terms.expansion_usd, 0),
+            structural_usd: DCP.Util.round(placement.terms.structural_usd, 0),
+            traffic_usd: DCP.Util.round(placement.terms.traffic_usd, 0),
+            objective_usd: DCP.Util.round(placement.terms.objective, 0),
+          },
+          baseline_terms: {
+            power_whip_usd: DCP.Util.round(placement.baseline.power_usd, 0),
+            coolant_hose_usd: DCP.Util.round(placement.baseline.coolant_usd, 0),
+            maintenance_usd: DCP.Util.round(placement.baseline.maintenance_usd, 0),
+            structural_usd: DCP.Util.round(placement.baseline.structural_usd, 0),
+            objective_usd: DCP.Util.round(placement.baseline.objective, 0),
+          },
+          weights: design.optimizer.weights || {},
+          objective_improvement_pct: pct(placement.baseline.objective, placement.terms.objective),
           ...placement.stats,
+        },
+        // Placement and utility siting each depend on the other, so they are run
+        // to a fixed point. `converged` false means the last pass still moved
+        // racks -- the layout is the best of the passes, but the two objectives
+        // are fighting and the report should not pretend otherwise.
+        utility_convergence: {
+          passes: convergence.length,
+          max_passes: maxPasses,
+          converged: convergence.length > 1
+            && convergence[convergence.length - 1].racks_moved === 0,
+          kept_pass: best ? best.pass : 1,
+          history: convergence,
+        },
+        constraints: {
+          hard_violations: placement.violations || 0,
+          // Positions from which no panel or no CDU can be reached at all. Zero
+          // on any sane room; non-zero means the pathway graph has a hole in it
+          // and some corner of the floor is not actually serviceable.
+          unreachable_positions: service ? service.unreachable : 0,
+          bay: DCP.Constraints.bayLoads(constraints, placement.posOf),
+          reserve: constraints.reserve
+            ? {
+              fraction: constraints.reserve.fraction,
+              y0_m: DCP.Util.round(constraints.reserve.y0, 2),
+              racks_inside: racks.filter((r) => r.y !== undefined && r.y >= constraints.reserve.y0).length,
+            }
+            : null,
+          access_door: { x_m: constraints.door.x, y_m: constraints.door.y },
+          crane_required_kg: design.room.crane_required_kg || 0,
+          max_haul_m: design.room.max_haul_m || 0,
+        },
+        pods: {
+          enabled: pods.enabled,
+          count: pods.pods.length,
+          racks_per_pod: (design.pods && design.pods.racks_per_pod) || 0,
+          list: pods.pods,
         },
         routing: {
           method: design.optimizer.routing,

@@ -198,6 +198,7 @@
       if (kind === "checkbox") v = el.checked;
       else if (kind === "number" || kind === "range") v = Number(el.value);
       else v = opts.number ? Number(el.value) : el.value;
+      if (opts.coerce) v = opts.coerce(v);
       set(path, v);
       if (opts.after) opts.after(v);
       const out = $(`${id}-v`);
@@ -291,6 +292,28 @@
     bind("do-partition", "optimizer.partition");
     bind("do-bundle", "optimizer.bundle");
     bind("seed", "optimizer.seed");
+
+    // `pods.enabled` is tri-state ("auto" | true | false) and a <select> only
+    // ever yields strings, so the two real booleans are decoded on the way in.
+    bind("pods-enabled", "pods.enabled", {
+      coerce: (v) => (v === "true" ? true : v === "false" ? false : "auto"),
+    });
+    bind("pod-racks", "pods.racks_per_pod");
+    bind("bay-m", "room.structural_bay_m");
+    bind("dist-load", "room.floor_distributed_kg_m2");
+    bind("haul-m", "room.max_haul_m");
+    bind("crane-kg", "room.crane_required_kg");
+    bind("reserve", "expansion.reserve_fraction", {
+      format: (v) => `${Math.round(v * 100)}% of depth`,
+    });
+
+    const weight = (id, key) => bind(id, `optimizer.weights.${key}`, {
+      format: (v) => `×${Number(v).toFixed(1)}`,
+    });
+    weight("w-power", "power");
+    weight("w-coolant", "coolant");
+    weight("w-maint", "maintenance");
+    weight("w-struct", "structural");
 
     refreshLayoutOptions();
     $("btn-add-rack").addEventListener("click", () => {

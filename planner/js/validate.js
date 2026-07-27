@@ -118,6 +118,55 @@
       }
     }
 
+    /* ------------------------------------------- placement constraints --- */
+    // The solver is told about these before it places anything, so reaching this
+    // code with a violation means something downstream of the search overrode it
+    // -- a pin, or a rack whose rules could not all be met at once. Either way it
+    // is the user's call now, so it is reported rather than silently accepted.
+    const con = (model.optimization && model.optimization.constraints) || null;
+    if (con) {
+      if (con.hard_violations > 0) {
+        add("error", "placement.constraint",
+          `${con.hard_violations} rack(s) stand where a hard placement rule forbids — ` +
+          `check pinned racks and the haul limit`, null);
+      }
+      if (con.bay.bays_over > 0) {
+        add("error", "room.distributed_load",
+          `${con.bay.bays_over} structural bay(s) carry more than the ` +
+          `${con.bay.capacity_kg_m2} kg/m² distributed rating — ` +
+          `${con.bay.overload_kg} kg over in total, peak ${con.bay.peak_kg_m2} kg/m²`, null);
+      } else if (con.bay.peak_kg_m2 > con.bay.capacity_kg_m2 * 0.85) {
+        add("warn", "room.distributed_load",
+          `peak distributed load ${con.bay.peak_kg_m2} kg/m² is within 15% of the ` +
+          `${con.bay.capacity_kg_m2} kg/m² rating over ${con.bay.bay_size_m} m bays`, null);
+      }
+      if (con.reserve && con.reserve.racks_inside > 0) {
+        add("warn", "room.expansion",
+          `${con.reserve.racks_inside} rack(s) sit inside the growth reserve ` +
+          `(beyond y=${con.reserve.y0_m} m) — the room has no room left to grow into`, null);
+      }
+    }
+
+    // A pod is a contiguous block of floor. A rack outside its own block means
+    // the containment mask was overridden, and the pod is no longer a pod.
+    const podPlan = (model.optimization && model.optimization.pods) || null;
+    if (podPlan && podPlan.enabled) {
+      for (const pod of podPlan.list) {
+        if (!pod.bounds) continue;
+        for (const name of pod.rack_names) {
+          const rack = racks.find((r) => r.name === name);
+          if (!rack || rack.x === undefined) continue;
+          const b = pod.bounds;
+          const tol = 1e-6;
+          if (rack.x < b.x0 - tol || rack.x > b.x1 + tol || rack.y < b.y0 - tol || rack.y > b.y1 + tol) {
+            add("error", "pod.containment",
+              `${rack.name} is assigned to ${pod.name} but stands at ` +
+              `(${R(rack.x, 2)}, ${R(rack.y, 2)}), outside that pod's block`, rack.name);
+          }
+        }
+      }
+    }
+
     /* ---------------------------------------------------------- cooling --- */
     if (cooling.capacity_kw < totals.it_load_kw) {
       add("error", "cooling.capacity",

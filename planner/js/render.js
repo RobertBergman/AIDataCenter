@@ -19,6 +19,9 @@
     switchboard: "#f06292",
   };
 
+  /** Pod outlines. Distinct hues, deliberately unlike the role colours. */
+  const POD_COLOR = ["#64b5f6", "#81c784", "#ba68c8", "#ffd54f", "#4db6ac", "#f48fb1"];
+
   /** Blue → amber → red ramp for fill and density overlays. */
   function ramp(t) {
     const x = Math.max(0, Math.min(1, t));
@@ -65,6 +68,37 @@
     if (z.distribution) {
       parts.push(`<rect x="${z.distribution.x0}" y="${z.distribution.y0}" width="${z.distribution.x1 - z.distribution.x0}"
         height="${z.distribution.y1 - z.distribution.y0}" fill="#161110" stroke="#3a2e29" stroke-width="0.03"/>`);
+    }
+
+    // Growth reserve: floor deliberately left empty. Drawn before the pods so a
+    // pod that has spilled into it reads as the exception it is.
+    const con = model.optimization && model.optimization.constraints;
+    if (con && con.reserve) {
+      parts.push(`<rect x="${model.floor.usable.x0}" y="${con.reserve.y0_m}"
+        width="${model.floor.usable.x1 - model.floor.usable.x0}"
+        height="${model.floor.usable.y1 - con.reserve.y0_m}"
+        fill="#0d1a12" stroke="#1f4d33" stroke-width="0.04" stroke-dasharray="0.4 0.3"/>`);
+      parts.push(t((model.floor.usable.x0 + model.floor.usable.x1) / 2,
+        con.reserve.y0_m + 0.45, "RESERVED FOR EXPANSION", 0.26));
+    }
+
+    // Pod blocks. The whole point of the hierarchy is that a pod is a place, so
+    // it gets drawn as one -- an outline around the floor it owns.
+    const podPlan = model.optimization && model.optimization.pods;
+    if (podPlan && podPlan.enabled) {
+      podPlan.list.forEach((pod, i) => {
+        if (!pod.bounds) return;
+        const b = pod.bounds;
+        const pad = model.floor.pitch / 2;
+        const color = POD_COLOR[i % POD_COLOR.length];
+        parts.push(`<g class="pod-shape" data-pod="${esc(pod.id)}">
+          <rect x="${b.x0 - pad}" y="${b.y0 - pad}"
+            width="${b.x1 - b.x0 + 2 * pad}" height="${b.y1 - b.y0 + 2 * pad}" rx="0.12"
+            fill="${color}" fill-opacity="0.05" stroke="${color}" stroke-width="0.06"
+            stroke-dasharray="0.5 0.35"/>
+          ${t((b.x0 + b.x1) / 2, b.y0 - pad + 0.32, `${pod.name} · ${pod.racks} racks · ${pod.kw} kW`, 0.24)}
+        </g>`);
+      });
     }
 
     // Tray overlay, drawn under the racks so labels stay readable.
@@ -321,6 +355,14 @@
     const t = model.totals;
     const kv = (k, v, cls = "") => `<div class="kv"><span>${k}</span><span class="${cls}">${v}</span></div>`;
     const pctText = (p) => (p > 0 ? `−${p}%` : `${-p}%`);
+    const money = (v) => `$${(v || 0).toLocaleString("en-US")}`;
+    /** A term next to what the unoptimised layout paid for the same thing. */
+    const termRow = (label, now, was) => {
+      if (!was) return kv(label, money(now));
+      const pct = Math.round(((was - now) / was) * 1000) / 10;
+      return kv(label, `${money(now)} · ${pct >= 0 ? "−" : "+"}${Math.abs(pct)}%`,
+        pct > 0 ? "win" : pct < 0 ? "warn" : "");
+    };
 
     el.innerHTML = [
       `<h4>Partitioning (KL/FM)</h4>`,
@@ -361,6 +403,48 @@
             `${o.placement.calibration.mean_error_m} m mean · ${o.placement.calibration.media_mismatch} mispriced`,
             o.placement.calibration.media_mismatch ? "warn" : "")
         : "",
+
+      // Every term the objective weighed, unweighted, so the number next to each
+      // is money rather than score.
+      ...(o.placement.terms ? [
+        `<h4>Objective terms</h4>`,
+        kv("cable — material", money(o.placement.terms.cable_material_usd)),
+        kv("cable — pull", money(o.placement.terms.cable_pull_usd)),
+        termRow("power — whips", o.placement.terms.power_whip_usd,
+          (o.placement.baseline_terms || {}).power_whip_usd),
+        termRow("coolant — hoses", o.placement.terms.coolant_hose_usd,
+          (o.placement.baseline_terms || {}).coolant_hose_usd),
+        kv("maintenance — access", money(o.placement.terms.maintenance_usd)),
+        o.placement.terms.expansion_usd
+          ? kv("expansion — reserve", money(o.placement.terms.expansion_usd), "warn") : "",
+        kv("structural — overload", money(o.placement.terms.structural_usd),
+          o.placement.terms.structural_usd > 0 ? "warn" : ""),
+        kv("traffic — locality", money(o.placement.terms.traffic_usd)),
+      ] : []),
+
+      ...(o.utility_convergence ? [
+        `<h4>Placement ⇄ utilities</h4>`,
+        kv("fixed point", `${o.utility_convergence.passes} of ${o.utility_convergence.max_passes} passes · ` +
+          (o.utility_convergence.converged ? "converged" : "still moving"),
+          o.utility_convergence.converged ? "" : "warn"),
+        kv("kept pass", o.utility_convergence.kept_pass),
+      ] : []),
+
+      ...(o.constraints ? [
+        `<h4>Constraints</h4>`,
+        kv("hard violations", o.constraints.hard_violations,
+          o.constraints.hard_violations ? "warn" : ""),
+        kv("distributed load", `${o.constraints.bay.peak_kg_m2} / ${o.constraints.bay.capacity_kg_m2} kg/m²`,
+          o.constraints.bay.bays_over ? "warn" : ""),
+        kv("bays over rating", o.constraints.bay.bays_over,
+          o.constraints.bay.bays_over ? "warn" : ""),
+      ] : []),
+
+      ...(o.pods && o.pods.enabled ? [
+        `<h4>Pods</h4>`,
+        ...o.pods.list.map((pod) =>
+          kv(pod.name, `${pod.racks} racks · ${pod.kw} kW · ${pod.positions} slots`)),
+      ] : []),
 
       `<h4>Routing (A*)</h4>`,
       kv("data tray peak fill", `${(o.routing.data_tray.peak_fill * 100).toFixed(0)}%`),

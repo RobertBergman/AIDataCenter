@@ -127,6 +127,11 @@ def check_cables(doc: dict, f: Findings) -> None:
     infra = set(pdus)
     for e in doc["power"].get("entrances", []):
         infra.add(e["name"])
+    # The switchboard lineup is where the service lands and where the RPP
+    # breakers live, so it terminates cable on both sides and has to be known
+    # here -- otherwise every PS-/PU-/PB- run reads as a dangling endpoint.
+    for s in doc["power"].get("switchboards", []):
+        infra.add(s["name"])
     for u in doc["power"]["ups"].get("units", []):
         infra.add(u["name"])
     for d in doc["power"]["distribution"].get("units", []):

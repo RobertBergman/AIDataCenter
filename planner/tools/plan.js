@@ -20,7 +20,8 @@ const path = require("path");
 
 const MODULES = [
   "util.js", "catalog.js", "design.js", "floor.js", "graph.js",
-  "partition.js", "pathways.js", "cost.js", "placement.js", "fabric.js",
+  "partition.js", "pathways.js", "cost.js", "constraints.js", "pod.js",
+  "placement.js", "fabric.js",
   "cooling.js", "power.js", "validate.js", "build.js", "yaml.js",
 ];
 
@@ -39,6 +40,35 @@ function parseArgs(argv) {
     else out.input = a;
   }
   return out;
+}
+
+/**
+ * Fill a loaded design out to the current schema.
+ *
+ * The design object doubles as the save file, so a file written before a knob
+ * existed simply has no opinion about it. Without this, that absence silently
+ * became a *different* default from the one `defaultDesign()` documents -- a
+ * saved design would quietly run with one utility pass instead of three and
+ * nothing would say so. Merging over the defaults keeps old files working and
+ * keeps "the default" a single definition.
+ *
+ * Arrays are taken from the file wholesale rather than merged element-wise: the
+ * rack list is the design, and a positional merge with the default racks would
+ * be nonsense.
+ */
+function withDefaults(loaded) {
+  const merge = (base, over) => {
+    if (Array.isArray(over) || over === null) return over;
+    if (typeof over !== "object" || typeof base !== "object" || base === null) {
+      return over === undefined ? base : over;
+    }
+    const out = { ...base };
+    for (const [k, v] of Object.entries(over)) {
+      out[k] = k in base ? merge(base[k], v) : v;
+    }
+    return out;
+  };
+  return merge(DCP.Design.defaultDesign(), loaded);
 }
 
 function setPath(obj, dotted, raw) {
@@ -65,7 +95,7 @@ function main() {
   }
 
   const design = args.input
-    ? JSON.parse(fs.readFileSync(args.input, "utf8"))
+    ? withDefaults(JSON.parse(fs.readFileSync(args.input, "utf8")))
     : DCP.Design.defaultDesign();
 
   for (const s of args.sets) {
@@ -143,6 +173,7 @@ function printReport(model, ms) {
   line("partition cut", `${o.partition.cut_gbps} GB/s (baseline ${o.partition.baseline_cut_gbps}, −${o.partition.improvement_pct}%)`);
   const p = o.placement;
   const usd = (v) => `$${(v || 0).toLocaleString("en-US")}`;
+  const pctOf = (base, now) => (base > 0 ? Math.round(((base - now) / base) * 1000) / 10 : 0);
   line("placement method", `${p.method}${p.seed ? ` · ${p.seed} seed` : ""}${p.iters ? ` · ${p.iters} iters · ${p.accepted} accepted` : ""}`);
   line("inter-rack media", `${usd(p.cost_usd)} (baseline ${usd(p.baseline_cost_usd)}, −${p.cost_improvement_pct}%)`);
   line("routed length", `${p.length_m} m (baseline ${p.baseline_length_m} m, −${p.length_improvement_pct}%)`);
@@ -160,6 +191,59 @@ function printReport(model, ms) {
   if (p.calibration && p.calibration.cables) {
     line("estimator error", `${p.calibration.mean_error_m} m mean · ${p.calibration.max_error_m} m max · ${p.calibration.media_mismatch} mispriced`);
   }
+
+  // Every term the objective weighed, so the total can be checked by hand.
+  const term = p.terms || {};
+  const baseTerm = p.baseline_terms || {};
+  const delta = (now, was) => (was ? ` (baseline ${usd(was)}, ${now <= was ? "−" : "+"}${Math.abs(pctOf(was, now))}%)` : "");
+  console.log("\nOBJECTIVE TERMS");
+  line("cable — material", usd(term.cable_material_usd));
+  line("cable — pull labour", usd(term.cable_pull_usd));
+  line("power — whips", `${usd(term.power_whip_usd)}${delta(term.power_whip_usd, baseTerm.power_whip_usd)}`);
+  line("coolant — hoses", `${usd(term.coolant_hose_usd)}${delta(term.coolant_hose_usd, baseTerm.coolant_hose_usd)}`);
+  line("maintenance — access", `${usd(term.maintenance_usd)}${delta(term.maintenance_usd, baseTerm.maintenance_usd)}`);
+  if (term.expansion_usd) line("expansion — reserve", usd(term.expansion_usd));
+  line("structural — overload", usd(term.structural_usd));
+  line("traffic — locality", usd(term.traffic_usd));
+  line("weighted objective", `${usd(term.objective_usd)} (baseline ${usd(baseTerm.objective_usd)}, −${p.objective_improvement_pct}%)`);
+
+  const uc = o.utility_convergence;
+  if (uc) {
+    line("utility fixed point", `${uc.passes} pass(es) of ${uc.max_passes} · ` +
+      (uc.converged ? "converged" : "still moving at the last pass") +
+      ` · kept pass ${uc.kept_pass}`);
+    for (const h of uc.history) {
+      line(`  pass ${h.pass}${h.pass === uc.kept_pass ? " ←" : "  "}`,
+        `${h.racks_moved === null ? "seed" : `${h.racks_moved} rack(s) moved`}` +
+        ` · whips ${usd(h.power_usd)} · hoses ${usd(h.coolant_usd)}`);
+    }
+  }
+
+  const c = o.constraints;
+  if (c) {
+    console.log("\nCONSTRAINTS");
+    line("hard violations", `${c.hard_violations}`);
+    line("distributed floor load", `peak ${c.bay.peak_kg_m2} kg/m² of ${c.bay.capacity_kg_m2} ` +
+      `over ${c.bay.bay_size_m} m bays · ${c.bay.bays_over} bay(s) over`);
+    line("heavy-rack haul", `> ${c.crane_required_kg} kg within ${c.max_haul_m} m of ` +
+      `the door at (${c.access_door.x_m}, ${c.access_door.y_m})`);
+    if (c.reserve) {
+      line("expansion reserve", `${Math.round(c.reserve.fraction * 100)}% of depth beyond ` +
+        `y=${c.reserve.y0_m} m · ${c.reserve.racks_inside} rack(s) inside it`);
+    }
+  }
+
+  const pods = o.pods;
+  if (pods && pods.enabled) {
+    console.log("\nPODS");
+    for (const pod of pods.list) {
+      const bb = pod.bounds;
+      line(pod.name, `${pod.racks} racks · ${pod.kw} kW · ${pod.positions} positions` +
+        (bb ? ` · x ${bb.x0}–${bb.x1} m, y ${bb.y0}–${bb.y1} m` : ""));
+    }
+  }
+
+  console.log("");
   line("trunks (Steiner)", `${o.bundling.trunks} · ${o.bundling.trunk_length_m} m of shared pathway`);
   line("data tray fill", `peak ${(o.routing.data_tray.peak_fill * 100).toFixed(0)}% · mean ${(o.routing.data_tray.mean_fill * 100).toFixed(0)}%`);
   line("power tray fill", `peak ${(o.routing.power_tray.peak_fill * 100).toFixed(0)}% · mean ${(o.routing.power_tray.mean_fill * 100).toFixed(0)}%`);

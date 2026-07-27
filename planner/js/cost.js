@@ -343,11 +343,233 @@
     }).filter((r) => r.saving_usd > 0);
   }
 
+  /* ------------------------------------------------ utility service cost -- */
+
+  /**
+   * What it costs to tie a rack at a given position into the facility.
+   *
+   * The placement objective used to price *data cable only*. Everything else a
+   * rack needs -- a power whip from the RPP column, a supply and return hose
+   * from its CDU -- was laid in afterwards, against whatever arrangement the
+   * fiber objective happened to produce. That is the "place racks where they
+   * fit" failure applied to the utilities: on the default design it is ~770 m of
+   * whip and ~200 m of hose, about $83k, that no solver ever looked at.
+   *
+   * Utilities differ from fiber in a way that matters for the formulation. A
+   * fiber link joins two racks, so it is quadratic -- its cost depends on where
+   * *both* ends land. A whip joins a rack to whichever panel is nearest, and a
+   * hose joins a rack to whichever CDU is nearest. Those are singly-indexed:
+   * cost depends only on where *this* rack sits. So they enter the objective as
+   * a linear term over a precomputed (rack × position) table, which is both
+   * cheaper than the quadratic part and exactly O(1) to re-evaluate on a move.
+   *
+   * Only the per-metre part is priced. Terminations, the breaker, the pair of
+   * quick-disconnects -- every rack pays those wherever it stands, so they are
+   * constant across layouts and cannot inform a placement decision. Same
+   * discipline as `bounds()`: report what placement can actually move.
+   */
+
+  const fieldCache = new Map();
+  const FIELD_CACHE_MAX = 6;
+
+  /**
+   * Pathway distance from every candidate position to every anchor, on one tier.
+   *
+   * Anchors are the things a rack has to reach -- RPP panels, CDUs. There are
+   * only ever a handful, so this is a Dijkstra per anchor rather than the
+   * all-pairs sweep `positionDistances` does, and it runs on the tier the run
+   * actually travels: power on the power tier, coolant on the fluid tier. Using
+   * the data tier for all three would charge a hose the ceiling height of a
+   * fiber tray.
+   */
+  function anchorField(floor, design, tier, anchors) {
+    const m = floor.positions.length;
+    const k = anchors.length;
+    const A = Array.from({ length: k }, () => new Float64Array(m).fill(Infinity));
+    if (!m || !k) return { A, k, m };
+
+    const key = [
+      floorSignature(floor, design), tier,
+      anchors.map((a) => `${DCP.Util.round(a.x, 2)}:${DCP.Util.round(a.y, 2)}`).join("|"),
+    ].join("#");
+    if (fieldCache.has(key)) return fieldCache.get(key);
+
+    const height = tier === "power" ? design.room.power_tray_height_m
+      : tier === "fluid" ? (design.room.raised_floor ? 0.3 : 0.5)
+      : design.room.tray_height_m;
+    const runs = tier === "power" ? design.room.power_tray_runs
+      : tier === "fluid" ? design.room.fluid_tray_runs
+      : design.room.data_tray_runs;
+
+    const g = DCP.Pathways.buildTier(floor, tier, height, runs);
+    const posNode = floor.positions.map((p, i) => DCP.Pathways.addDrop(g, `pos:${i}`, p.x, p.y));
+    const anchorNode = anchors.map((a, i) => DCP.Pathways.addDrop(g, `anchor:${i}`, a.x, a.y));
+
+    for (let i = 0; i < k; i++) {
+      const dist = dijkstra(g, anchorNode[i]);
+      for (let j = 0; j < m; j++) A[i][j] = dist[posNode[j]];
+    }
+
+    const result = { A, k, m };
+    if (fieldCache.size >= FIELD_CACHE_MAX) fieldCache.delete(fieldCache.keys().next().value);
+    fieldCache.set(key, result);
+    return result;
+  }
+
+  /**
+   * Per-metre rate for one rack's power whips and coolant hoses.
+   *
+   * Both scale with what the rack draws, which is the point: a 100 kW rack pulls
+   * three whips a side and needs a fatter bore than a 12 kW management rack, so
+   * moving the big one costs several times what moving the small one saves. A
+   * flat per-rack rate would place them as though they were interchangeable.
+   */
+  function serviceRates(rack, design, feeds) {
+    const C = DCP.Catalog;
+    const P = design.power;
+
+    const pduSpec = C.RACK_PDU[P.rack_pdu_model] || C.RACK_PDU["pdu-3ph-60a"];
+    // Same derated sizing power.js uses, so the whip count here is the whip
+    // count that gets scheduled.
+    const pduKw = pduSpec.amps * P.breaker_derate * pduSpec.volts
+      * (pduSpec.phases === 3 ? Math.sqrt(3) : 1) / 1000;
+    const perSide = Math.max(1, Math.ceil(rack.kw / feeds / Math.max(1e-9, pduKw)));
+
+    // A busway tap drops straight out of the run hanging over its own row, so
+    // there is no horizontal whip to shorten and the term correctly goes to
+    // zero -- which is the real advantage of busway, now visible to the solver.
+    let whipRate = 0;
+    if (P.distribution !== "busway") {
+      const pick = C.sizePowerMedia(rack.kw / feeds / perSide, P.volts, P.phases, P.breaker_derate);
+      const whip = C.POWER_MEDIA[pick.key];
+      whipRate = (whip ? whip.cost_usd_per_m || 0 : 0) * perSide * feeds;
+    }
+
+    const deltaT = Math.max(1, design.cooling.return_c - design.cooling.supply_c);
+    let hoseRate = 0;
+    if (design.cooling.mode === "water") {
+      const lpm = C.flowLpm(rack.kw, deltaT);
+      const hose = C.COOLANT_MEDIA[C.sizeCoolantMedia(lpm, "hose").key];
+      // Supply and return: two runs over the same path.
+      hoseRate = (hose ? hose.cost_usd_per_m || 0 : 0) * 2;
+    }
+
+    return { power_usd_per_m: whipRate, coolant_usd_per_m: hoseRate, pdus_per_side: perSide };
+  }
+
+  /**
+   * (rack × position) tables of what the utilities cost at each spot.
+   *
+   * A rack is served by the *nearest* panel and the nearest CDU, which is what
+   * power.js and cooling.js go on to do, so the table takes a min over anchors.
+   * That ignores panel capacity -- a relaxation, and a deliberate one: the
+   * fixed-point pass in build.js recomputes these against gear that has actually
+   * been sited under its real capacity rules, so the approximation is corrected
+   * rather than believed.
+   *
+   * `Infinity` survives into the table when a position cannot reach any anchor
+   * at all, and `unreachable` counts how often. It is left as Infinity here so
+   * the condition stays visible rather than being laundered into a large number
+   * that looks like a normal answer; placement.js clamps it to its own finite
+   * violation price at the point it folds these into the objective.
+   */
+  function serviceCosts(spec) {
+    const { racks, floor, design, feeds } = spec;
+    const n = racks.length;
+    const m = floor.positions.length;
+    const power = new Float64Array(n * m);
+    const coolant = new Float64Array(n * m);
+    const out = {
+      power, coolant, n, m,
+      power_anchors: spec.powerAnchors || [],
+      coolant_anchors: spec.coolantAnchors || [],
+      unreachable: 0,
+    };
+    if (!n || !m) return out;
+
+    const pf = (out.power_anchors.length)
+      ? anchorField(floor, design, "power", out.power_anchors) : null;
+    const cf = (out.coolant_anchors.length)
+      ? anchorField(floor, design, "fluid", out.coolant_anchors) : null;
+
+    // Nearest anchor per position, once, rather than per rack -- the rate scales
+    // the same distance for every rack, so the argmin is rack-independent.
+    const nearestPower = new Float64Array(m).fill(0);
+    const nearestCoolant = new Float64Array(m).fill(0);
+    for (let j = 0; j < m; j++) {
+      let bp = Infinity;
+      if (pf) for (let i = 0; i < pf.k; i++) if (pf.A[i][j] < bp) bp = pf.A[i][j];
+      let bc = Infinity;
+      if (cf) for (let i = 0; i < cf.k; i++) if (cf.A[i][j] < bc) bc = cf.A[i][j];
+      nearestPower[j] = pf ? bp : 0;
+      nearestCoolant[j] = cf ? bc : 0;
+      if (!Number.isFinite(nearestPower[j]) || !Number.isFinite(nearestCoolant[j])) out.unreachable++;
+    }
+
+    racks.forEach((rack, i) => {
+      const r = serviceRates(rack, design, feeds);
+      const base = i * m;
+      for (let j = 0; j < m; j++) {
+        const dp = nearestPower[j];
+        const dc = nearestCoolant[j];
+        power[base + j] = Number.isFinite(dp) ? r.power_usd_per_m * dp : Infinity;
+        coolant[base + j] = Number.isFinite(dc) ? r.coolant_usd_per_m * dc : Infinity;
+      }
+    });
+
+    return out;
+  }
+
+  /** Anchors for pass one, before any gear has actually been sited. */
+  function estimateAnchors(floor, design) {
+    const power = [];
+    const zone = floor.zones.distribution;
+    if (design.power.distribution === "busway") {
+      // A busway hangs over its own row, so every row is its own anchor and the
+      // horizontal term vanishes -- which is the real advantage of busway and
+      // should show up in the objective as such.
+      for (const row of floor.rows) power.push({ x: (floor.usable.x0 + floor.usable.x1) / 2, y: row.y });
+    } else if (zone) {
+      const x = (zone.x0 + zone.x1) / 2;
+      for (const row of floor.rows) power.push({ x, y: row.y });
+    }
+
+    const coolant = [];
+    if (design.cooling.mode === "water" && design.cooling.water_type === "dlc") {
+      // In-row CDUs land among the racks they serve; before placement the best
+      // guess is one per `racks_per_cdu` worth of row, spread along each row.
+      const perRow = Math.max(1, Math.round(floor.slotsPerRow / Math.max(1, design.cooling.racks_per_cdu)));
+      for (const row of floor.rows) {
+        for (let k = 0; k < perRow; k++) {
+          const t = (k + 0.5) / perRow;
+          coolant.push({ x: floor.usable.x0 + t * (floor.usable.x1 - floor.usable.x0), y: row.y });
+        }
+      }
+    } else if (design.cooling.mode === "water") {
+      // Rear-door and perimeter plant stands against the far wall.
+      const x = design.room.width_m - design.room.perimeter_m;
+      for (const row of floor.rows) coolant.push({ x, y: row.y });
+    }
+
+    return { power, coolant };
+  }
+
+  /** Anchors for later passes: where the gear was actually put. */
+  function sitedAnchors(cooling, power) {
+    return {
+      power: (power.distribution || []).map((d) => ({ x: d.x, y: d.y })),
+      coolant: (cooling.units || [])
+        .filter((u) => u.kind === "cdu" || u.kind === "crah")
+        .map((u) => ({ x: u.x, y: u.y })),
+    };
+  }
+
   DCP.Cost = {
     reachSteps, stepCost, stepKey,
     positionDistances, floorSignature,
     linkGroups, flowGroups,
     cableCost, cableLength, bounds, unlockCurve,
+    anchorField, serviceCosts, serviceRates, estimateAnchors, sitedAnchors,
     UNREACH_MULT, UNREACH_PER_M,
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -11,7 +11,7 @@
 schema_version: 1
 generator:
   tool: AIDataCenter planner
-  pipeline: partition(KL/FM) → QAP(anneal) → elevate → site → route(A*/Steiner)
+  pipeline: partition(KL/FM) → pods(bisect) → QAP(anneal, constrained) → site ⇄ place (fixed point) → route(A*/Steiner)
   seed: 20260725
   deterministic: true
 site:
@@ -62,9 +62,9 @@ cooling:
       capacity_kw: 1300
       rated_flow_lpm: 1200
       draw_kw: 26
-      x_m: 7.85
+      x_m: 6.35
       y_m: 3.6
-      position: p0-2
+      position: p0-0
       serves: 4
     - name: CDU-02
       kind: cdu
@@ -72,16 +72,16 @@ cooling:
       capacity_kw: 1300
       rated_flow_lpm: 1200
       draw_kw: 26
-      x_m: 7.85
+      x_m: 6.35
       y_m: 6
-      position: p1-2
+      position: p1-0
       serves: 4
     - name: MANIFOLD-GPU-01
       kind: manifold
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 6.725
+      x_m: 7.475
       y_m: 3.6
       mounted_on: r1
       serves: 1
@@ -90,7 +90,7 @@ cooling:
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 5.975
+      x_m: 8.225
       y_m: 3.6
       mounted_on: r2
       serves: 1
@@ -99,7 +99,7 @@ cooling:
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 6.725
+      x_m: 7.475
       y_m: 6
       mounted_on: r3
       serves: 1
@@ -108,7 +108,7 @@ cooling:
       model: rack manifold
       capacity_kw: 150
       draw_kw: 0
-      x_m: 5.975
+      x_m: 8.225
       y_m: 6
       mounted_on: r4
       serves: 1
@@ -146,7 +146,7 @@ power:
       amps: 1200
       capacity_kw: 690
       sections: 3
-      maintenance_bypass: false
+      maintenance_bypass: true
       bypass_rating_kw: 218.9
       downstream_kw: 218.9
       lineup_length_m: 2.4
@@ -158,7 +158,7 @@ power:
       amps: 1200
       capacity_kw: 690
       sections: 3
-      maintenance_bypass: false
+      maintenance_bypass: true
       bypass_rating_kw: 218.9
       downstream_kw: 218.9
       lineup_length_m: 2.4
@@ -494,8 +494,9 @@ racks:
   - name: GPU-01
     layout: gpu-dlc-b300
     role: compute
+    pod: null
     frame: { type: "750-52u", u_height: 52, width_m: 0.75, depth_m: 1.2 }
-    position: { row: 0, slot: 1, x_m: 6.725, y_m: 3.6, facing: north, pinned: false }
+    position: { row: 0, slot: 2, x_m: 7.475, y_m: 3.6, facing: north, pinned: false }
     totals: { u_used: 33, u_free: 19, kw: 100.95, gpus: 64, weight_kg: 978, pdus_per_side: 3 }
     elevation:
       - { u: 52, ru: 1, name: oob-gpu-01, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -510,8 +511,9 @@ racks:
   - name: GPU-02
     layout: gpu-dlc-b300
     role: compute
+    pod: null
     frame: { type: "750-52u", u_height: 52, width_m: 0.75, depth_m: 1.2 }
-    position: { row: 0, slot: 0, x_m: 5.975, y_m: 3.6, facing: north, pinned: false }
+    position: { row: 0, slot: 3, x_m: 8.225, y_m: 3.6, facing: north, pinned: false }
     totals: { u_used: 33, u_free: 19, kw: 100.95, gpus: 64, weight_kg: 978, pdus_per_side: 3 }
     elevation:
       - { u: 52, ru: 1, name: oob-gpu-02, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -526,8 +528,9 @@ racks:
   - name: NET-01
     layout: network-spine
     role: network
+    pod: null
     frame: { type: "600-48u", u_height: 48, width_m: 0.6, depth_m: 1.2 }
-    position: { row: 1, slot: 1, x_m: 6.725, y_m: 6, facing: south, pinned: false }
+    position: { row: 1, slot: 2, x_m: 7.475, y_m: 6, facing: south, pinned: false }
     totals: { u_used: 19, u_free: 29, kw: 10.85, gpus: 0, weight_kg: 355, pdus_per_side: 1 }
     elevation:
       - { u: 48, ru: 1, name: oob-net-01, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -548,8 +551,9 @@ racks:
   - name: BOOT-01
     layout: mgmt-boot
     role: mgmt
+    pod: null
     frame: { type: "600-48u", u_height: 48, width_m: 0.6, depth_m: 1.2 }
-    position: { row: 1, slot: 0, x_m: 5.975, y_m: 6, facing: south, pinned: false }
+    position: { row: 1, slot: 3, x_m: 8.225, y_m: 6, facing: south, pinned: false }
     totals: { u_used: 13, u_free: 35, kw: 6.15, gpus: 0, weight_kg: 389, pdus_per_side: 1 }
     elevation:
       - { u: 48, ru: 1, name: oob-boot-01, model: DCS-7010TX-48, role: oob, kw: 0.15 }
@@ -4976,6 +4980,15 @@ cables:
     a: { device: UPS-A2, port: output, rack: electrical }
     b: { device: SWBD-A, port: ups-out-2, rack: electrical }
     status: planned
+  - label: PB-A-SWBD-A
+    class: power
+    media: bus-section-800a
+    length_m: 2.4
+    feed: A
+    bundle: null
+    a: { device: SWBD-A, port: bypass-in, rack: electrical }
+    b: { device: SWBD-A, port: bypass-out, rack: electrical }
+    status: planned
   - label: PF-A-RPP-A2
     class: power
     media: feeder-400a
@@ -4988,7 +5001,7 @@ cables:
   - label: PW-A1-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.07
+    length_m: 9.32
     feed: A
     bundle: null
     bends: 1
@@ -4998,7 +5011,7 @@ cables:
   - label: PW-A2-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.07
+    length_m: 9.32
     feed: A
     bundle: null
     bends: 1
@@ -5008,7 +5021,7 @@ cables:
   - label: PW-A3-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.07
+    length_m: 9.32
     feed: A
     bundle: null
     bends: 1
@@ -5018,7 +5031,7 @@ cables:
   - label: PW-A1-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 10.83
+    length_m: 8.57
     feed: A
     bundle: null
     bends: 1
@@ -5028,7 +5041,7 @@ cables:
   - label: PW-A2-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 10.83
+    length_m: 8.57
     feed: A
     bundle: null
     bends: 1
@@ -5038,7 +5051,7 @@ cables:
   - label: PW-A3-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 10.83
+    length_m: 8.57
     feed: A
     bundle: null
     bends: 1
@@ -5048,7 +5061,7 @@ cables:
   - label: PW-A1-NET-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.07
+    length_m: 9.32
     feed: A
     bundle: null
     bends: 1
@@ -5058,7 +5071,7 @@ cables:
   - label: PW-A1-BOOT-01
     class: power
     media: whip-3ph-60a
-    length_m: 10.83
+    length_m: 8.57
     feed: A
     bundle: null
     bends: 1
@@ -5110,6 +5123,15 @@ cables:
     a: { device: UPS-B2, port: output, rack: electrical }
     b: { device: SWBD-B, port: ups-out-2, rack: electrical }
     status: planned
+  - label: PB-B-SWBD-B
+    class: power
+    media: bus-section-800a
+    length_m: 2.4
+    feed: B
+    bundle: null
+    a: { device: SWBD-B, port: bypass-in, rack: electrical }
+    b: { device: SWBD-B, port: bypass-out, rack: electrical }
+    status: planned
   - label: PF-B-RPP-B1
     class: power
     media: feeder-400a
@@ -5123,7 +5145,7 @@ cables:
   - label: PW-B1-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 14.18
+    length_m: 13.43
     feed: B
     bundle: null
     bends: 2
@@ -5133,7 +5155,7 @@ cables:
   - label: PW-B2-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 14.18
+    length_m: 13.43
     feed: B
     bundle: null
     bends: 2
@@ -5143,7 +5165,7 @@ cables:
   - label: PW-B3-GPU-01
     class: power
     media: whip-3ph-60a
-    length_m: 14.18
+    length_m: 13.43
     feed: B
     bundle: null
     bends: 2
@@ -5153,7 +5175,7 @@ cables:
   - label: PW-B1-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 14.93
+    length_m: 12.68
     feed: B
     bundle: null
     bends: 2
@@ -5163,7 +5185,7 @@ cables:
   - label: PW-B2-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 14.93
+    length_m: 12.68
     feed: B
     bundle: null
     bends: 2
@@ -5173,7 +5195,7 @@ cables:
   - label: PW-B3-GPU-02
     class: power
     media: whip-3ph-60a
-    length_m: 14.93
+    length_m: 12.68
     feed: B
     bundle: null
     bends: 2
@@ -5183,7 +5205,7 @@ cables:
   - label: PW-B1-NET-01
     class: power
     media: whip-3ph-60a
-    length_m: 11.98
+    length_m: 11.23
     feed: B
     bundle: null
     bends: 2
@@ -5193,7 +5215,7 @@ cables:
   - label: PW-B1-BOOT-01
     class: power
     media: whip-3ph-60a
-    length_m: 12.73
+    length_m: 10.48
     feed: B
     bundle: null
     bends: 2
@@ -5203,7 +5225,7 @@ cables:
   - label: CW-S-GPU-01
     class: coolant
     media: hose-dn32
-    length_m: 6.53
+    length_m: 7.28
     bundle: null
     bends: 2
     flow_lpm: 111.2
@@ -5213,7 +5235,7 @@ cables:
   - label: CW-R-GPU-01
     class: coolant
     media: hose-dn32
-    length_m: 6.53
+    length_m: 7.28
     bundle: null
     bends: 2
     flow_lpm: 111.2
@@ -5223,7 +5245,7 @@ cables:
   - label: CW-S-GPU-02
     class: coolant
     media: hose-dn32
-    length_m: 7.28
+    length_m: 8.02
     bundle: null
     bends: 2
     flow_lpm: 111.2
@@ -5233,7 +5255,7 @@ cables:
   - label: CW-R-GPU-02
     class: coolant
     media: hose-dn32
-    length_m: 7.28
+    length_m: 8.02
     bundle: null
     bends: 2
     flow_lpm: 111.2
@@ -5243,7 +5265,7 @@ cables:
   - label: CW-S-NET-01
     class: coolant
     media: hose-dn25
-    length_m: 6.53
+    length_m: 7.28
     bundle: null
     bends: 2
     flow_lpm: 12
@@ -5253,7 +5275,7 @@ cables:
   - label: CW-R-NET-01
     class: coolant
     media: hose-dn25
-    length_m: 6.53
+    length_m: 7.28
     bundle: null
     bends: 2
     flow_lpm: 12
@@ -5263,7 +5285,7 @@ cables:
   - label: CW-S-BOOT-01
     class: coolant
     media: hose-dn25
-    length_m: 7.28
+    length_m: 8.03
     bundle: null
     bends: 2
     flow_lpm: 6.8
@@ -5273,7 +5295,7 @@ cables:
   - label: CW-R-BOOT-01
     class: coolant
     media: hose-dn25
-    length_m: 7.28
+    length_m: 8.03
     bundle: null
     bends: 2
     flow_lpm: 6.8
@@ -5283,7 +5305,7 @@ cables:
   - label: CF-S-CDU-01
     class: coolant
     media: pipe-dn100
-    length_m: 12.05
+    length_m: 10.55
     bundle: null
     bends: 1
     flow_lpm: 1200
@@ -5293,7 +5315,7 @@ cables:
   - label: CF-R-CDU-01
     class: coolant
     media: pipe-dn100
-    length_m: 12.05
+    length_m: 10.55
     bundle: null
     bends: 1
     flow_lpm: 1200
@@ -5303,7 +5325,7 @@ cables:
   - label: CF-S-CDU-02
     class: coolant
     media: pipe-dn100
-    length_m: 14.65
+    length_m: 10.55
     bundle: null
     bends: 1
     flow_lpm: 1200
@@ -5313,7 +5335,7 @@ cables:
   - label: CF-R-CDU-02
     class: coolant
     media: pipe-dn100
-    length_m: 12.05
+    length_m: 13.15
     bundle: null
     bends: 1
     flow_lpm: 1200
@@ -5324,6 +5346,7 @@ media:
   aoc-100g: { name: AOC QSFP28 100G, max_m: 30, speed_gbps: 100, od_mm: 3, cost_usd: 420 }
   aoc-400g: { name: AOC QSFP-DD 400G, max_m: 30, speed_gbps: 400, od_mm: 3, cost_usd: 1450 }
   bus-section-1600a: { name: Switchboard bus section + 1600A breaker, amps: 1600, od_mm: 130, cost_usd: 6900 }
+  bus-section-800a: { name: Switchboard bus section + 800A breaker, amps: 800, od_mm: 90, cost_usd: 3800 }
   cat6a: { name: Cat6A copper, max_m: 90, speed_gbps: 10, od_mm: 6.5, cost_usd: 28 }
   dac-400g: { name: DAC QSFP-DD 400G, max_m: 3, speed_gbps: 400, od_mm: 8.4, cost_usd: 260 }
   feeder-1200a:
@@ -5389,9 +5412,44 @@ optimization:
     link_groups: 5
     flow_groups: 3
     calibration: { cables: 158, mean_error_m: 0, max_error_m: 0, media_mismatch: 0 }
+    terms:
+      cable_material_usd: 198200
+      cable_pull_usd: 2224
+      power_whip_usd: 5171
+      coolant_hose_usd: 2486
+      maintenance_usd: 1472
+      expansion_usd: 0
+      structural_usd: 0
+      traffic_usd: 1612
+      objective_usd: 211164
+    baseline_terms: { power_whip_usd: 5915, coolant_hose_usd: 2114, maintenance_usd: 1055, structural_usd: 0, objective_usd: 211639 }
+    weights: { power: 1, coolant: 1, maintenance: 1, expansion: 1, structural: 1 }
+    objective_improvement_pct: 0.2
     seed: greedy
-    accepted: 13378
+    accepted: 5662
     iters: 24000
+  utility_convergence:
+    passes: 3
+    max_passes: 3
+    converged: true
+    kept_pass: 2
+    history:
+      - { pass: 1, objective_usd: 211309, power_usd: 6064, coolant_usd: 1738 }
+      - { pass: 2, racks_moved: 2, objective_usd: 211164, power_usd: 5171, coolant_usd: 2486 }
+      - { pass: 3, racks_moved: 0, objective_usd: 211164, power_usd: 5171, coolant_usd: 2486 }
+  constraints:
+    hard_violations: 0
+    unreachable_positions: 0
+    bay: { peak_kg_m2: 54.3, capacity_kg_m2: 732, bays_over: 0, overload_kg: 0, bay_size_m: 6 }
+    reserve: null
+    access_door: { x_m: 6, y_m: 0 }
+    crane_required_kg: 1200
+    max_haul_m: 40
+  pods:
+    enabled: false
+    count: 0
+    racks_per_pod: 8
+    list: []
   routing:
     method: astar
     congestion_weight: 0.6
@@ -5403,7 +5461,7 @@ optimization:
       hottest: []
     power_tray:
       peak_fill: 0.115
-      mean_fill: 0.022
+      mean_fill: 0.015
       over_fill_segments: 0
       hottest: []
   bundling: { enabled: true, trunks: 0, trunk_length_m: 0 }
@@ -5412,15 +5470,15 @@ totals:
   gpus: 128
   servers: 28
   switches: 18
-  cables: 428
-  cable_length_m: 1963.3
-  cable_cost_usd: 391525
+  cables: 430
+  cable_length_m: 1944
+  cable_cost_usd: 397389
   cables_by_class:
     fabric: { count: 312, length_m: 1353.6, cost_usd: 237280 }
     oob: { count: 34, length_m: 130.2, cost_usd: 3304 }
     mgmt: { count: 42, length_m: 114.2, cost_usd: 1176 }
-    power: { count: 28, length_m: 259.2, cost_usd: 129457 }
-    coolant: { count: 12, length_m: 106, cost_usd: 20308 }
+    power: { count: 30, length_m: 240, cost_usd: 136433 }
+    coolant: { count: 12, length_m: 106, cost_usd: 19196 }
   cables_by_media:
     aoc-400g: { count: 128, length_m: 892.8, cost_usd: 185600 }
     aoc-100g: { count: 30, length_m: 219, cost_usd: 12600 }
@@ -5428,11 +5486,12 @@ totals:
     cat6a: { count: 70, length_m: 201.8, cost_usd: 1960 }
     feeder-1200a: { count: 2, length_m: 8.2, cost_usd: 30836 }
     bus-section-1600a: { count: 8, length_m: 28, cost_usd: 64160 }
+    bus-section-800a: { count: 2, length_m: 4.8, cost_usd: 8464 }
     feeder-400a: { count: 2, length_m: 27.4, cost_usd: 16894 }
-    whip-3ph-60a: { count: 16, length_m: 195.6, cost_usd: 17567 }
-    hose-dn32: { count: 4, length_m: 27.6, cost_usd: 2552 }
-    hose-dn25: { count: 4, length_m: 27.6, cost_usd: 1964 }
-    pipe-dn100: { count: 4, length_m: 50.8, cost_usd: 15792 }
+    whip-3ph-60a: { count: 16, length_m: 171.6, cost_usd: 16079 }
+    hose-dn32: { count: 4, length_m: 30.6, cost_usd: 2736 }
+    hose-dn25: { count: 4, length_m: 30.6, cost_usd: 2108 }
+    pipe-dn100: { count: 4, length_m: 44.8, cost_usd: 14352 }
   it_load_kw: 218.9
   facility_load_kw: 273.6
   power_density_kw_m2: 1.82
@@ -5446,7 +5505,7 @@ totals:
 validation:
   ok: true
   errors: 0
-  warnings: 5
+  warnings: 3
   items:
     - severity: warn
       code: room.floor_load
@@ -5460,14 +5519,6 @@ validation:
       code: cooling.residual_air
       subject: cooling
       message: direct-liquid still leaves 21.9 kW to the air path (PSUs, DIMMs, NICs) — the room still needs air handling
-    - severity: warn
-      code: power.bypass
-      subject: SWBD-A
-      message: SWBD-A has no maintenance bypass — the UPS cannot be taken out of the path for service without dropping the whole A feed
-    - severity: warn
-      code: power.bypass
-      subject: SWBD-B
-      message: SWBD-B has no maintenance bypass — the UPS cannot be taken out of the path for service without dropping the whole B feed
     - severity: warn
       code: build.note
       subject: null

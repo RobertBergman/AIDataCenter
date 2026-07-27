@@ -137,7 +137,8 @@
     doc.schema_version = 1;
     doc.generator = {
       tool: "AIDataCenter planner",
-      pipeline: "partition(KL/FM) → QAP(anneal) → elevate → site → route(A*/Steiner)",
+      pipeline: "partition(KL/FM) → pods(bisect) → QAP(anneal, constrained) → " +
+        "site ⇄ place (fixed point) → route(A*/Steiner)",
       seed: design.optimizer.seed,
       deterministic: true,
     };
@@ -276,10 +277,32 @@
       counts: fabric.totals,
     };
 
+    // The pod as a physical block of floor: which racks it holds and which
+    // rectangle it owns. A commissioning crew builds one of these at a time, so
+    // it belongs in the source of truth next to the racks rather than buried in
+    // the optimizer report.
+    const podPlan = (optimization && optimization.pods) || null;
+    const podOfRack = new Map();
+    if (podPlan && podPlan.enabled) {
+      for (const pod of podPlan.list) {
+        for (const name of pod.rack_names) podOfRack.set(name, pod.name);
+      }
+      doc.pods = podPlan.list.map((pod) => ({
+        name: pod.name,
+        racks: pod.rack_names,
+        rack_count: pod.racks,
+        kw: pod.kw,
+        weight_kg: pod.weight_kg,
+        floor_positions: pod.positions,
+        bounds_m: pod.bounds,
+      }));
+    }
+
     doc.racks = racks.map((rack) => ({
       name: rack.name,
       layout: rack.layout,
       role: DCP.Catalog.RACK_LAYOUTS[rack.layout].role,
+      pod: podOfRack.get(rack.name) || null,
       frame: {
         type: rack.rack_type,
         u_height: rack.u_height,

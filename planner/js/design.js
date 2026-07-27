@@ -27,7 +27,17 @@
         cold_aisle_m: 1.8,      // front-to-front service aisle
         hot_aisle_m: 1.2,       // back-to-back exhaust aisle
         raised_floor: false,
+        // Point load: one rack over its own footprint. A property of the rack,
+        // identical wherever it stands, so placement cannot help it.
         floor_capacity_kg_m2: 1220,
+        // Distributed load: everything standing in one structural bay, aisles
+        // included. This one *is* placement dependent -- it is what stops the
+        // solver stacking every liquid rack into a single corner of the slab.
+        floor_distributed_kg_m2: 732,
+        structural_bay_m: 6.0,    // column grid the distributed load is judged over
+        access_side: "south",     // wall the loading door and service route land on
+        crane_required_kg: 1200,  // above this a rack needs a lift, not a pallet jack
+        max_haul_m: 40,           // how far such a rack may be moved from that door
         tray_height_m: 3.2,     // data tray tier above finished floor
         power_tray_height_m: 3.8, // power tier -- physically separated from data
         data_tray_runs: 2,      // parallel tray baskets per aisle, per tier
@@ -93,6 +103,20 @@
         emit_oob: true,
       },
 
+      /* The pod as a physical block of floor, not just a fabric grouping.
+       * "auto" turns it on once there is enough for two real pods -- below that
+       * the hierarchy is bookkeeping with no locality to win. */
+      pods: {
+        enabled: "auto",         // "auto" | true | false
+        racks_per_pod: 8,
+      },
+
+      /* Floor held back for the next phase, taken from the far end of the room. */
+      expansion: {
+        reserve_fraction: 0,     // 0 = build the whole room now
+        penalty_usd_per_rack: 25000,
+      },
+
       /* Drives the traffic matrix used by partitioning and QAP placement. */
       workload: {
         tp_size: 8,              // tensor-parallel GPUs (usually intra-node)
@@ -118,6 +142,31 @@
         // Installed labour per metre pulled. Keeps distance worth minimising in
         // rooms where every layout buys the same media anyway.
         pull_cost_usd_per_m: 2.0,
+        /**
+         * What the objective is allowed to care about, and how much.
+         *
+         * Every term is already in dollars, so 1.0 means "charge this at face
+         * value" and the weighted sum is a real number someone can hold you to.
+         * Moving one off 1.0 is a deliberate statement that this project values
+         * the thing differently from what it costs -- turn `coolant` up on a
+         * site where plumbing labour is scarce, turn `maintenance` up on a hall
+         * that will be run by two people.
+         *
+         * Setting one to 0 does not make the term free, only invisible: it will
+         * still be built and still be paid for, just not optimised.
+         */
+        weights: {
+          power: 1.0,        // whip copper from the RPP column
+          coolant: 1.0,      // supply and return hose from the CDU
+          maintenance: 1.0,  // technician walk from the service door
+          expansion: 1.0,    // eating into the growth reserve
+          structural: 1.0,   // distributed floor load over a bay
+        },
+        access_usd_per_m: 90,      // annualised cost of a metre of that walk
+        overload_usd_per_kg: 40,   // price on a kilogram over the bay's rating
+        // Placement is solved against where the CDUs and panels are, but those
+        // are sited against where the racks ended up. Iterate until it settles.
+        utility_passes: 3,
         routing: "astar",        // congestion-aware A* over the pathway graph
         congestion_weight: 0.6,
         bend_penalty_m: 1.5,

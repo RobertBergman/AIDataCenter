@@ -250,6 +250,78 @@
         </section>
 
         <section class="panel">
+          <h2>Pods &amp; constraints</h2>
+          <div class="grid2">
+            <div class="field">
+              <label for="pods-enabled">Pod hierarchy</label>
+              <select id="pods-enabled">
+                <option value="auto">Auto — once two pods fit</option>
+                <option value="true">Always</option>
+                <option value="false">Off — one flat room</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pod-racks">Racks per pod</label>
+              <input type="number" id="pod-racks" min="2" max="64" step="1" />
+            </div>
+          </div>
+          <p class="hint">A pod owns a contiguous block of floor: its racks, CDU and power district
+            stay together, which shortens coolant loops and shrinks the placement search.</p>
+          <div class="grid2">
+            <div class="field">
+              <label for="bay-m">Structural bay</label>
+              <input type="number" id="bay-m" min="2" max="20" step="0.5" />
+            </div>
+            <div class="field">
+              <label for="dist-load">Distributed load (kg/m²)</label>
+              <input type="number" id="dist-load" min="100" max="3000" step="10" />
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="haul-m">Max haul from door (m)</label>
+              <input type="number" id="haul-m" min="0" max="200" step="1" />
+            </div>
+            <div class="field">
+              <label for="crane-kg">Crane needed above (kg)</label>
+              <input type="number" id="crane-kg" min="0" max="5000" step="50" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="reserve">Expansion reserve <output id="reserve-v"></output></label>
+            <input type="range" id="reserve" min="0" max="0.6" step="0.05" />
+          </div>
+          <p class="hint">Floor held back at the far end of the room. Racks may still spill into it,
+            but the solver is charged for every one that does.</p>
+        </section>
+
+        <section class="panel">
+          <h2>Objective weights</h2>
+          <p class="hint">Every term is already in dollars, so 1.0 charges it at face value.
+            Move one off 1.0 to say this project values it differently from what it costs.</p>
+          <div class="grid2">
+            <div class="field">
+              <label for="w-power">Power whips <output id="w-power-v"></output></label>
+              <input type="range" id="w-power" min="0" max="4" step="0.1" />
+            </div>
+            <div class="field">
+              <label for="w-coolant">Coolant hoses <output id="w-coolant-v"></output></label>
+              <input type="range" id="w-coolant" min="0" max="4" step="0.1" />
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label for="w-maint">Maintenance access <output id="w-maint-v"></output></label>
+              <input type="range" id="w-maint" min="0" max="4" step="0.1" />
+            </div>
+            <div class="field">
+              <label for="w-struct">Structural load <output id="w-struct-v"></output></label>
+              <input type="range" id="w-struct" min="0" max="4" step="0.1" />
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
           <h2>Racks <span class="muted" id="rack-count"></span></h2>
           <div class="field">
             <label for="add-layout">Add rack</label>
@@ -339,6 +411,8 @@
   <script src="js/partition.js"></script>
   <script src="js/pathways.js"></script>
   <script src="js/cost.js"></script>
+  <script src="js/constraints.js"></script>
+  <script src="js/pod.js"></script>
   <script src="js/placement.js"></script>
   <script src="js/fabric.js"></script>
   <script src="js/cooling.js"></script>

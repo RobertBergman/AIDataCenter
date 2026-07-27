@@ -44,6 +44,15 @@
   const DCP = (root.DCP = root.DCP || {});
 
   /**
+   * What standing somewhere a hard rule forbids costs the objective.
+   *
+   * Far above any real layout decision -- no arrangement of cable is worth a
+   * rack in the wrong pod -- but finite, so a solve that begins in violation can
+   * still be led out of it one move at a time.
+   */
+  const INFEASIBLE_USD = 5e6;
+
+  /**
    * Legacy geometric distance, kept as a fallback for callers with no pathway
    * graph. The real solver uses DCP.Cost.positionDistances, which walks the tray
    * skeleton and is exact rather than approximate.
@@ -68,15 +77,109 @@
   /**
    * The objective, with incremental deltas.
    *
-   * Both terms are sparse: a rack pair only contributes if it carries cable or
-   * demand. Evaluating a move therefore costs O(groups touching that rack), not
-   * O(racks) -- which is what makes tens of thousands of iterations affordable on
-   * a hall with hundreds of racks.
+   * Three shapes of term, and the shape is what decides how each is evaluated:
+   *
+   *   quadratic -- fiber and traffic. Cost depends on where *both* ends of a
+   *                relationship land. Sparse, so a move costs O(groups touching
+   *                that rack) rather than O(racks).
+   *
+   *   linear    -- power whips, coolant hoses, walk-to-the-door, growth reserve.
+   *                Each depends only on where *this* rack sits, so they collapse
+   *                into one precomputed (rack × position) table and a move costs
+   *                exactly two lookups.
+   *
+   *   aggregate -- distributed floor load. Not a property of any single rack:
+   *                it is the total weight standing in a structural bay. Kept as
+   *                a running per-bay total so a move still only touches the two
+   *                bays involved.
+   *
+   * Everything is in dollars, so the weights multiply real money: 1.0 means
+   * "charge this at face value", and anything else is a deliberate statement
+   * that the design cares about it more or less than the invoice says.
    */
   function makeObjective(problem, lambda, pull) {
     const { n, dist, groups, flows, slack2 } = problem;
     const D = dist.D;
     const Cost = DCP.Cost;
+    const m = dist.m || (problem.positions ? problem.positions.length : 0);
+
+    /* -------------------------------------------------------- linear -- */
+    // Folded into one table up front: the hot loop should not be adding four
+    // weighted arrays together on every candidate move.
+    const W = problem.weights || {};
+    const svc = problem.service;
+    const con = problem.constraints;
+    const parts = [];
+    if (svc) {
+      parts.push([W.power ?? 1, svc.power], [W.coolant ?? 1, svc.coolant]);
+    }
+    if (con) {
+      parts.push([W.maintenance ?? 1, con.maintenance], [W.expansion ?? 1, con.expansion]);
+    }
+    const masked = con && con.mask;
+    let L = null;
+    if ((parts.length || masked) && n && m) {
+      L = new Float64Array(n * m);
+      for (const [w, arr] of parts) {
+        if (!w || !arr) continue;
+        for (let k = 0; k < L.length; k++) L[k] += w * arr[k];
+      }
+      // A position that reaches no panel or no CDU comes back as Infinity. Left
+      // in, the very first delta subtracts one from another and yields NaN,
+      // which compares false against everything and turns the annealer into a
+      // machine that rejects every move without saying why. Clamp to the same
+      // finite wall a hard violation gets: unbuildable, but still a number.
+      for (let k = 0; k < L.length; k++) {
+        if (!Number.isFinite(L[k])) L[k] = INFEASIBLE_USD;
+      }
+      // A hard rule is enforced twice, on purpose. `allows` stops the annealer
+      // proposing an illegal move at all, which is the cheap path; the price
+      // below is what makes an illegal cell *score* badly, which is what the GA
+      // needs -- crossover recombines permutations wholesale and cannot be
+      // talked out of producing one. Finite, so a design that starts in
+      // violation still has a gradient pointing out of it.
+      if (masked) {
+        for (let k = 0; k < L.length; k++) if (!con.mask[k]) L[k] += INFEASIBLE_USD;
+      }
+    }
+    const lin = L ? (i, j) => L[i * m + j] : () => 0;
+
+    /* ----------------------------------------------------- aggregate -- */
+    const bays = con && con.bays;
+    const wStruct = W.structural ?? 1;
+    const overRate = con ? con.overload_usd_per_kg * wStruct : 0;
+    const bayLoad = bays ? new Float64Array(bays.count) : null;
+    const bayCap = bays ? bays.capacity_kg : 0;
+    const over = (load) => (load > bayCap ? (load - bayCap) * overRate : 0);
+
+    function resetBays(posOf) {
+      if (!bayLoad) return;
+      bayLoad.fill(0);
+      for (let i = 0; i < n; i++) bayLoad[bays.of[posOf[i]]] += con.weight[i];
+    }
+
+    function bayTotal() {
+      if (!bayLoad) return 0;
+      let v = 0;
+      for (let b = 0; b < bayLoad.length; b++) v += over(bayLoad[b]);
+      return v;
+    }
+
+    /**
+     * Change in overload cost from shifting `w` kg out of bay `from` into `to`.
+     * Same bay is a no-op, which matters -- most moves inside a row stay put.
+     */
+    function bayShift(from, to, w) {
+      if (!bayLoad || from === to || w === 0) return 0;
+      return over(bayLoad[from] - w) - over(bayLoad[from])
+           + over(bayLoad[to] + w) - over(bayLoad[to]);
+    }
+
+    function bayApply(from, to, w) {
+      if (!bayLoad || from === to || w === 0) return;
+      bayLoad[from] -= w;
+      bayLoad[to] += w;
+    }
 
     // Precompute the price ladder per group so the hot loop never re-derives it.
     const gSteps = groups.map((g) => Cost.reachSteps(g.speed));
@@ -104,6 +207,11 @@
       return g.count * (Cost.stepCost(gSteps[gi], d) + pull * d);
     };
 
+    /**
+     * Full objective from scratch. Also re-seeds the running bay totals, so any
+     * caller that evaluates an arbitrary permutation (the GA does) leaves the
+     * incremental state consistent with what it just scored.
+     */
     function total(posOf) {
       let v = 0;
       for (let i = 0; i < groups.length; i++) {
@@ -112,7 +220,9 @@
       if (lambda > 0) {
         for (const f of flows) v += lambda * f.w * D[posOf[f.a]][posOf[f.b]];
       }
-      return v;
+      for (let i = 0; i < n; i++) v += lin(i, posOf[i]);
+      resetBays(posOf);
+      return v + bayTotal();
     }
 
     /** Native-unit breakdown, for the report. */
@@ -127,13 +237,43 @@
         length += g.count * d;
       }
       for (const f of flows) moment += f.w * D[posOf[f.a]][posOf[f.b]];
+
+      // Reported unweighted, in the units each term is actually bought in. The
+      // weights are a statement of priority, not an estimate of price, so a
+      // report that folded them in would be quoting a number no supplier will
+      // honour.
+      let power = 0;
+      let coolant = 0;
+      let maintenance = 0;
+      let expansion = 0;
+      for (let i = 0; i < n; i++) {
+        const j = posOf[i];
+        if (svc) {
+          power += svc.power[i * m + j];
+          coolant += svc.coolant[i * m + j];
+        }
+        if (con) {
+          maintenance += con.maintenance[i * m + j];
+          expansion += con.expansion[i * m + j];
+        }
+      }
+      resetBays(posOf);
+      const structural = bayTotal();
+
       return {
         material_usd: material,
         pull_usd: pull * length,
         length_m: length,
         traffic_moment: moment,
         traffic_usd: lambda * moment,
-        objective: material + pull * length + lambda * moment,
+        power_usd: Number.isFinite(power) ? power : 0,
+        coolant_usd: Number.isFinite(coolant) ? coolant : 0,
+        maintenance_usd: maintenance,
+        expansion_usd: expansion,
+        structural_usd: structural,
+        objective: material + pull * length + lambda * moment
+          + (Number.isFinite(power) ? power : 0) + (Number.isFinite(coolant) ? coolant : 0)
+          + maintenance + expansion + structural,
       };
     }
 
@@ -167,6 +307,23 @@
           }
         }
       }
+
+      d += lin(a, pb) - lin(a, pa) + lin(b, pa) - lin(b, pb);
+
+      // A swap moves both racks at once, so the two bay shifts have to be scored
+      // against the same starting state -- applying one and then measuring the
+      // other would double-count whenever both racks share a bay.
+      if (bayLoad) {
+        const ba = bays.of[pa];
+        const bb = bays.of[pb];
+        if (ba !== bb) {
+          const wa = con.weight[a];
+          const wb = con.weight[b];
+          const before = over(bayLoad[ba]) + over(bayLoad[bb]);
+          const after2 = over(bayLoad[ba] - wa + wb) + over(bayLoad[bb] - wb + wa);
+          d += after2 - before;
+        }
+      }
       return d;
     }
 
@@ -186,10 +343,37 @@
           d += lambda * f.w * (D[oa][ob] - D[posOf[f.a]][posOf[f.b]]);
         }
       }
+      d += lin(a, target) - lin(a, posOf[a]);
+      if (bayLoad) d += bayShift(bays.of[posOf[a]], bays.of[target], con.weight[a]);
       return d;
     }
 
-    return { total, terms, swapDelta, moveDelta, lambda, pull };
+    /* --------------------------------------------------------- commits -- */
+    // The search applies a move by mutating posOf; the running bay totals have
+    // to be told, because they are the one piece of state that cannot be read
+    // back out of the permutation cheaply.
+    function commitMove(a, from, to) {
+      if (bayLoad) bayApply(bays.of[from], bays.of[to], con.weight[a]);
+    }
+
+    function commitSwap(a, b, pa, pb) {
+      if (!bayLoad) return;
+      const ba = bays.of[pa];
+      const bb = bays.of[pb];
+      if (ba === bb) return;
+      bayLoad[ba] += con.weight[b] - con.weight[a];
+      bayLoad[bb] += con.weight[a] - con.weight[b];
+    }
+
+    /** Is rack `i` allowed to stand at position `j`? */
+    const allows = con && con.mask
+      ? (i, j) => con.mask[i * m + j] === 1
+      : () => true;
+
+    return {
+      total, terms, swapDelta, moveDelta, commitMove, commitSwap,
+      reset: resetBays, allows, linAt: lin, lambda, pull,
+    };
   }
 
   /* ----------------------------------------------------------------- seeds -- */
@@ -220,28 +404,35 @@
    * repeatedly place whichever unplaced rack talks most to the placed set, at
    * whichever free position minimizes the incremental cost.
    */
-  function greedySeed(n, m, D, adj) {
+  function greedySeed(n, m, D, adj, obj) {
     const posOf = new Int32Array(n).fill(-1);
     const used = new Uint8Array(m);
+    // A seed that ignores the hard rules hands the annealer a layout it has to
+    // spend its early, hottest iterations digging out of. Cheaper to start legal.
+    const allows = obj && obj.allows ? obj.allows : () => true;
+    const linAt = obj && obj.linAt ? obj.linAt : () => 0;
 
     const weight = [];
     for (let i = 0; i < n; i++) weight.push({ i, f: DCP.Util.sum([...adj[i].values()]) });
     weight.sort((a, b) => b.f - a.f || a.i - b.i);
 
-    // "Central" = minimum total distance to everywhere else.
-    let center = 0;
+    // "Central" = minimum total distance to everywhere else, among the positions
+    // the busiest rack is actually allowed to occupy.
+    const first = weight[0].i;
+    let center = -1;
     let bestCenter = Infinity;
     for (let j = 0; j < m; j++) {
-      let s = 0;
+      if (!allows(first, j)) continue;
+      let s = linAt(first, j);
       for (let l = 0; l < m; l++) s += D[j][l];
       if (s < bestCenter) {
         bestCenter = s;
         center = j;
       }
     }
+    if (center < 0) center = 0;
 
     const placed = [];
-    const first = weight[0].i;
     posOf[first] = center;
     used[center] = 1;
     placed.push(first);
@@ -263,14 +454,30 @@
       let bestPos = -1;
       let bestCost = Infinity;
       for (let j = 0; j < m; j++) {
-        if (used[j]) continue;
-        let c = 0;
+        if (used[j] || !allows(pick, j)) continue;
+        // Affinity to what is already down, plus what the utilities cost here.
+        // Without the second half the seed places purely for fiber and hands the
+        // annealer a layout whose whips and hoses all have to be unpicked.
+        let c = linAt(pick, j);
         for (const p of placed) c += (adj[pick].get(p) || 0) * D[j][posOf[p]];
         if (c < bestCost) {
           bestCost = c;
           bestPos = j;
         }
       }
+      // Nothing legal left: take the cheapest illegal spot rather than stalling.
+      // The mask is priced into the objective too, so refinement can still fix it.
+      if (bestPos < 0) {
+        for (let j = 0; j < m; j++) {
+          if (used[j]) continue;
+          const c = linAt(pick, j);
+          if (c < bestCost) {
+            bestCost = c;
+            bestPos = j;
+          }
+        }
+      }
+      if (bestPos < 0) break;
       posOf[pick] = bestPos;
       used[bestPos] = 1;
       placed.push(pick);
@@ -278,13 +485,18 @@
 
     for (let i = 0; i < n; i++) {
       if (posOf[i] >= 0) continue;
+      let fallback = -1;
       for (let j = 0; j < m; j++) {
-        if (!used[j]) {
-          posOf[i] = j;
-          used[j] = 1;
+        if (used[j]) continue;
+        if (fallback < 0) fallback = j;
+        if (allows(i, j)) {
+          fallback = j;
           break;
         }
       }
+      if (fallback < 0) break;
+      posOf[i] = fallback;
+      used[fallback] = 1;
     }
     return posOf;
   }
@@ -305,14 +517,22 @@
   function probeScale(obj, posOf, movable, free, rand) {
     let sum = 0;
     let n = 0;
-    for (let i = 0; i < 128; i++) {
+    for (let i = 0; i < 256 && n < 128; i++) {
       const a = movable[Math.floor(rand() * movable.length)];
       let d;
       if (free.length && rand() < 0.25) {
-        d = obj.moveDelta(posOf, a, free[Math.floor(rand() * free.length)]);
+        const target = free[Math.floor(rand() * free.length)];
+        // Sample only from moves the search would actually make. A constraint
+        // violation is priced in the millions to keep the annealer off it, and
+        // letting one into the scale would set T against a number no accepted
+        // move ever approaches -- the same failure the docstring above describes
+        // for constant media cost, an order of magnitude worse.
+        if (!obj.allows(a, target)) continue;
+        d = obj.moveDelta(posOf, a, target);
       } else {
         const b = movable[Math.floor(rand() * movable.length)];
         if (a === b) continue;
+        if (!obj.allows(a, posOf[b]) || !obj.allows(b, posOf[a])) continue;
         d = obj.swapDelta(posOf, a, b);
       }
       sum += Math.abs(d);
@@ -341,6 +561,10 @@
     const free = [];
     for (let j = 0; j < m; j++) if (!used[j]) free.push(j);
 
+    // The running per-bay totals are state, and the caller may have handed us a
+    // permutation the objective has never seen (a GA result, a previous pass).
+    obj.reset(posOf);
+
     const iters = opts.iters || 20000;
     const t0 = opts.t0 || 1.0;
     const t1 = opts.t1 || 0.01;
@@ -368,21 +592,30 @@
         const a = movable[Math.floor(rand() * movable.length)];
         const fi = Math.floor(rand() * free.length);
         const target = free[fi];
+        // Skip rather than score: a proposal the rules forbid is not a candidate,
+        // and evaluating it only to reject it wastes the iteration budget.
+        if (!obj.allows(a, target)) continue;
         delta = obj.moveDelta(posOf, a, target);
         apply = () => {
-          free[fi] = posOf[a];
+          const from = posOf[a];
+          free[fi] = from;
           posOf[a] = target;
+          obj.commitMove(a, from, target);
         };
       } else {
         const a = movable[Math.floor(rand() * movable.length)];
         let b = movable[Math.floor(rand() * movable.length)];
         if (a === b) b = movable[(movable.indexOf(a) + 1) % movable.length];
         if (a === b) continue;
+        // Both halves of a swap have to be legal in their new home.
+        if (!obj.allows(a, posOf[b]) || !obj.allows(b, posOf[a])) continue;
         delta = obj.swapDelta(posOf, a, b);
         apply = () => {
-          const t = posOf[a];
-          posOf[a] = posOf[b];
-          posOf[b] = t;
+          const pa = posOf[a];
+          const pb = posOf[b];
+          posOf[a] = pb;
+          posOf[b] = pa;
+          obj.commitSwap(a, b, pa, pb);
         };
       }
 
@@ -500,7 +733,8 @@
   /* ----------------------------------------------------------------- entry -- */
 
   /**
-   * @param {object} problem  {n, D, positions, groups, flows, slack2}
+   * @param {object} problem  {n, dist, positions, groups, flows, slack2,
+   *                           service, constraints, weights}
    * @param {object} opts     {method, seed, iters, t0, t1, pins, frozen,
    *                           traffic_weight, pull_cost_usd_per_m}
    */
@@ -561,7 +795,7 @@
     if (method === "sequential") {
       posOf = baselinePos;
     } else {
-      posOf = greedySeed(n, m, D, adj);
+      posOf = greedySeed(n, m, D, adj, obj);
       stats.seed = "greedy";
 
       if (method === "anneal") {
@@ -597,8 +831,14 @@
       }
     }
 
+    // Pinning happens after the solve and overrides it, so it is the one way a
+    // finished layout can still sit on an illegal cell. Count them here rather
+    // than trusting the search, which by then is not the last word.
+    let violations = 0;
+    for (let i = 0; i < n; i++) if (!obj.allows(i, posOf[i])) violations++;
+
     return {
-      posOf, method, lambda,
+      posOf, method, lambda, violations,
       terms: obj.terms(posOf),
       baseline: obj.terms(baselinePos),
       stats,
