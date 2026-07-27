@@ -19,6 +19,41 @@
    * optical entries that means the pair of transceivers plus the fiber.
    */
   const MEDIA = {
+    /* 800G OSFP -- the current generation.
+     *
+     * The reach ladder is *tighter* than 400G, not looser, and that is the
+     * single most important fact for a floor plan at this speed. Passive copper
+     * fell from 3 m to 2 m going from 400G to 800G, because the signal integrity
+     * budget shrank while the baud rate doubled. A row that used to be wired in
+     * DAC no longer can be.
+     *
+     * What replaced it is a middle of the ladder that did not previously exist:
+     * ACC at 5 m and AEC at 10 m are both active copper, far cheaper than optics
+     * and heavy enough to matter for tray fill. Row-to-row at 800G is an AEC
+     * decision, and it is the rung most sensitive to where the solver puts a
+     * rack -- which is exactly the leverage cost.js reports on.
+     */
+    "dac-800g": {
+      name: "DAC OSFP 800G (passive)", kind: "copper", speed_gbps: 800,
+      max_m: 2, cost_usd: 460, od_mm: 9.5, weight_kg_per_m: 0.36, trunkable: false,
+    },
+    "acc-800g": {
+      name: "ACC OSFP 800G (active copper)", kind: "copper", speed_gbps: 800,
+      max_m: 5, cost_usd: 900, od_mm: 7.2, weight_kg_per_m: 0.22, trunkable: false,
+    },
+    "aec-800g": {
+      name: "AEC OSFP 800G (active electrical)", kind: "copper", speed_gbps: 800,
+      max_m: 10, cost_usd: 1300, od_mm: 6.8, weight_kg_per_m: 0.19, trunkable: false,
+    },
+    "aoc-800g": {
+      name: "AOC OSFP 800G", kind: "optical", speed_gbps: 800,
+      max_m: 50, cost_usd: 2400, od_mm: 3.0, weight_kg_per_m: 0.011, trunkable: false,
+    },
+    "dr8-800g": {
+      name: "800G DR8 optics + MPO-16 SMF", kind: "optical", speed_gbps: 800,
+      max_m: 500, cost_usd: 4400, od_mm: 3.2, weight_kg_per_m: 0.012, trunkable: true,
+    },
+
     "dac-400g": {
       name: "DAC QSFP-DD 400G", kind: "copper", speed_gbps: 400,
       max_m: 3, cost_usd: 260, od_mm: 8.4, weight_kg_per_m: 0.28, trunkable: false,
@@ -51,7 +86,12 @@
 
   /** Ordered cheapest-first per speed; the media selector walks this. */
   const MEDIA_LADDER = {
+    800: ["dac-800g", "acc-800g", "aec-800g", "aoc-800g", "dr8-800g"],
     400: ["dac-400g", "aec-400g", "aoc-400g", "smf-400g"],
+    // A 200G port is wired with 400G-class media; listing it explicitly beats
+    // relying on the caller's fallback, which silently resolves anything it does
+    // not recognise to the 400G ladder whether or not that is appropriate.
+    200: ["dac-400g", "aec-400g", "aoc-400g", "smf-400g"],
     100: ["dac-25g", "aoc-100g"],
     25: ["dac-25g", "aoc-100g"],
     10: ["cat6a"],
@@ -241,17 +281,52 @@
       cooling: ["air"], class: "gpu",
     },
     "hgx-b300-dlc": {
+      // Blackwell Ultra baseboard, ConnectX-8 SuperNIC at 800G per port.
       vendor: "Generic", model: "HGX B300 4U direct-liquid", ru: 4, kw: 12.6, gpus: 8,
-      fabric_nics: 8, nic_speed: 400, psus: 6, psu_kw: 3.3, weight_kg: 95,
+      fabric_nics: 8, nic_speed: 800, psus: 6, psu_kw: 3.3, weight_kg: 95,
       cooling: ["water"], class: "gpu", liquid_fraction: 0.9,
     },
+    /* Rack-scale units.
+     *
+     * These are not servers that happen to be sold together. A tray's GPUs are
+     * wired to every other GPU in the rack by the NVSwitch trays standing in
+     * that same rack, so the tray count is fixed by the fabric rather than by
+     * shelf space -- which is why `max_servers` equals `default_servers` on
+     * every one of these layouts and why exceeding it is a validation error
+     * rather than a tight fit.
+     *
+     * Power figures are per tray at sustained load, chosen so the rack total
+     * lands on the published nameplate: 18 trays + 9 NVSwitch.
+     */
     "gb200-tray": {
-      vendor: "NVIDIA", model: "GB200 NVL72 compute tray", ru: 1, kw: 6.6, gpus: 4,
-      fabric_nics: 4, nic_speed: 400, psus: 0, psu_kw: 0, weight_kg: 38,
+      // 18 × 5.9 + 9 × 1.4 = 118.8 kW, against NVIDIA's ~120 kW nameplate.
+      vendor: "NVIDIA", model: "GB200 NVL72 compute tray", ru: 1, kw: 5.9, gpus: 4,
+      fabric_nics: 4, nic_speed: 400, psus: 0, psu_kw: 0, weight_kg: 32,
+      cooling: ["water"], class: "gpu", liquid_fraction: 0.95, busbar_powered: true,
+    },
+    "gb300-tray": {
+      // Blackwell Ultra: 288 GB HBM3e per GPU and ConnectX-8 at 800G.
+      // 18 × 6.6 + 9 × 1.5 = 132.3 kW, matching observed GB300 rack draw.
+      vendor: "NVIDIA", model: "GB300 NVL72 compute tray", ru: 1, kw: 6.6, gpus: 4,
+      fabric_nics: 4, nic_speed: 800, psus: 0, psu_kw: 0, weight_kg: 34,
+      cooling: ["water"], class: "gpu", liquid_fraction: 0.95, busbar_powered: true,
+    },
+    "vr-tray": {
+      // Vera Rubin NVL144, H2 2026. Each of the 72 Rubin packages carries two
+      // compute dies, so a 4-package tray presents 8 GPU dies and the rack
+      // totals 144 -- which is where the NVL144 name comes from, on the same
+      // Oberon frame as NVL72. 18 × 6.4 + 9 × 1.6 = 129.6 kW.
+      vendor: "NVIDIA", model: "Vera Rubin NVL144 compute tray", ru: 1, kw: 6.4, gpus: 8,
+      fabric_nics: 4, nic_speed: 800, psus: 0, psu_kw: 0, weight_kg: 35,
       cooling: ["water"], class: "gpu", liquid_fraction: 0.95, busbar_powered: true,
     },
     "nvl-switch-tray": {
-      vendor: "NVIDIA", model: "NVLink switch tray", ru: 1, kw: 2.0, gpus: 0,
+      vendor: "NVIDIA", model: "NVLink switch tray", ru: 1, kw: 1.4, gpus: 0,
+      fabric_nics: 0, nic_speed: 0, psus: 0, psu_kw: 0, weight_kg: 28,
+      cooling: ["water"], class: "nvlink", busbar_powered: true,
+    },
+    "nvl6-switch-tray": {
+      vendor: "NVIDIA", model: "NVLink 6 switch tray", ru: 1, kw: 1.6, gpus: 0,
       fabric_nics: 0, nic_speed: 0, psus: 0, psu_kw: 0, weight_kg: 30,
       cooling: ["water"], class: "nvlink", busbar_powered: true,
     },
@@ -261,8 +336,11 @@
       cooling: ["air", "water"], class: "cpu",
     },
     "jbof-2u": {
+      // 400G per port: a shelf of PCIe Gen5 NVMe saturates well past 200G, and
+      // GPUDirect Storage means the checkpoint path is competing with the
+      // training fabric for the same window.
       vendor: "Generic", model: "2U NVMe JBOF", ru: 2, kw: 1.7, gpus: 0,
-      fabric_nics: 2, nic_speed: 200, psus: 2, psu_kw: 2.0, weight_kg: 34,
+      fabric_nics: 2, nic_speed: 400, psus: 2, psu_kw: 2.0, weight_kg: 34,
       cooling: ["air", "water"], class: "storage",
     },
     "mgmt-1u": {
@@ -274,6 +352,33 @@
 
   /* ------------------------------------------------------------- switches -- */
   const SWITCHES = {
+    /* 800G, 51.2 Tb/s class. Two things change the floor plan versus 400G.
+     *
+     * The port count per RU doubles, so a spine layer that needed four boxes
+     * needs two -- fewer network racks, and the ones left carry more of the
+     * fabric, which makes where they stand matter more rather than less.
+     *
+     * And the power per switch roughly doubles. A 64-port 800G spine is a
+     * ~0.65-0.95 kW device, so a fully-populated network rack is now a real
+     * thermal load rather than a rounding error next to the GPU rows.
+     */
+    "7060x6-32pe": {
+      vendor: "Arista", model: "DCS-7060X6-32PE (32× 800G)", ports: 32, speed: 800,
+      ru: 1, kw: 0.42, weight_kg: 13, tier: "leaf",
+    },
+    "7060x6-64pe": {
+      vendor: "Arista", model: "DCS-7060X6-64PE (64× 800G, 51.2T)", ports: 64, speed: 800,
+      ru: 2, kw: 0.64, weight_kg: 20, tier: "spine",
+    },
+    "sn5600": {
+      vendor: "NVIDIA", model: "Spectrum-4 SN5600 (64× 800G, 51.2T)", ports: 64, speed: 800,
+      ru: 2, kw: 0.94, weight_kg: 22, tier: "spine",
+    },
+    "7800r4-128x800": {
+      vendor: "Arista", model: "DCS-7800R4 (128× 800G)", ports: 128, speed: 800,
+      ru: 8, kw: 7.8, weight_kg: 95, tier: "super",
+    },
+
     "7060dx5-32": {
       vendor: "Arista", model: "DCS-7060DX5-32", ports: 32, speed: 400,
       ru: 1, kw: 0.55, weight_kg: 11, tier: "leaf",
@@ -403,7 +508,12 @@
     "600-48u": { name: "600mm × 1200mm 48U", w_m: 0.6, d_m: 1.2, u: 48, weight_kg: 165, max_kw_air: 25 },
     "750-48u": { name: "750mm × 1200mm 48U (wide, cable-managed)", w_m: 0.75, d_m: 1.2, u: 48, weight_kg: 190, max_kw_air: 40 },
     "750-52u": { name: "750mm × 1200mm 52U (high)", w_m: 0.75, d_m: 1.2, u: 52, weight_kg: 210, max_kw_air: 40 },
-    "nvl72-rack": { name: "NVL72 liquid rack (600mm × 1200mm)", w_m: 0.6, d_m: 1.2, u: 48, weight_kg: 700, max_kw_air: 0 },
+    // Oberon: the frame GB200, GB300 and Vera Rubin NVL144 all share. The empty
+    // weight carries the busbar, manifold and cable spine, so a populated rack
+    // lands near the ~1360 kg NVIDIA quotes -- a point load around 1900 kg/m²,
+    // which is why `floor_capacity_kg_m2` has to be an AI-hall number and not a
+    // legacy raised-floor one.
+    "oberon-rack": { name: "Oberon liquid rack (600mm × 1200mm)", w_m: 0.6, d_m: 1.2, u: 48, weight_kg: 620, max_kw_air: 0 },
   };
 
   /* ------------------------------------------------------- rack layouts --
@@ -429,9 +539,22 @@
       server: "hgx-b300-dlc", default_servers: 8, max_servers: 10, cooling: ["water"],
     },
     "gpu-nvl72": {
-      name: "GPU · GB200 NVL72 (18 trays + 9 NVLink, liquid)", role: "compute", rack_type: "nvl72-rack",
+      name: "GPU · GB200 NVL72 (18 trays + 9 NVLink, liquid)", role: "compute", rack_type: "oberon-rack",
       server: "gb200-tray", default_servers: 18, max_servers: 18, cooling: ["water"],
       companions: [{ sku: "nvl-switch-tray", count: 9, source: "servers" }],
+      busbar: true,
+    },
+    "gpu-gb300-nvl72": {
+      name: "GPU · GB300 NVL72 (18 trays + 9 NVLink, liquid)", role: "compute", rack_type: "oberon-rack",
+      server: "gb300-tray", default_servers: 18, max_servers: 18, cooling: ["water"],
+      companions: [{ sku: "nvl-switch-tray", count: 9, source: "servers" }],
+      busbar: true,
+    },
+    "gpu-vr-nvl144": {
+      name: "GPU · Vera Rubin NVL144 (18 trays + 9 NVLink 6, liquid)", role: "compute",
+      rack_type: "oberon-rack",
+      server: "vr-tray", default_servers: 18, max_servers: 18, cooling: ["water"],
+      companions: [{ sku: "nvl6-switch-tray", count: 9, source: "servers" }],
       busbar: true,
     },
     "cpu-general": {

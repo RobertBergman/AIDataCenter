@@ -11,17 +11,22 @@
   function defaultDesign() {
     return {
       meta: {
-        name: "ai-dc-1",
+        name: "ai-factory-pod-1",
         room: "Hall A",
         tenant: "research",
-        description: "AI datacenter room — planner output",
+        description:
+          "AI factory reference pod — 8× Vera Rubin NVL144, 800G rail-optimized " +
+          "fabric, direct-to-chip liquid, warm-water loop",
       },
 
       /* Room geometry. Rows run along X; depth is Y. All metres. */
       room: {
-        width_m: 24.0,
-        depth_m: 16.0,
-        clear_height_m: 4.5,
+        width_m: 30.0,
+        depth_m: 20.0,
+        // AI halls run taller than legacy rooms: an Oberon rack is over 2.2 m
+        // before the overhead busway, the fibre tray and the coolant header
+        // stack above it.
+        clear_height_m: 5.2,
         tile_m: 0.6,
         perimeter_m: 1.2,       // keep-clear against every wall
         cold_aisle_m: 1.8,      // front-to-front service aisle
@@ -29,15 +34,22 @@
         raised_floor: false,
         // Point load: one rack over its own footprint. A property of the rack,
         // identical wherever it stands, so placement cannot help it.
-        floor_capacity_kg_m2: 1220,
+        //
+        // 2500 kg/m² is an AI-hall number, not a legacy raised-floor one. A
+        // populated Oberon rack is ~1.4 t on 0.72 m², a point load north of
+        // 2000 kg/m², against the 1000-1220 kg/m² a traditional raised floor is
+        // rated for. Purpose-built AI space is specified at 20-25 kN/m² on
+        // reinforced slab, and a planner defaulting to the old figure would
+        // reject every rack-scale design it is now meant to lay out.
+        floor_capacity_kg_m2: 2500,
         // Distributed load: everything standing in one structural bay, aisles
         // included. This one *is* placement dependent -- it is what stops the
         // solver stacking every liquid rack into a single corner of the slab.
-        floor_distributed_kg_m2: 732,
+        floor_distributed_kg_m2: 1200,
         structural_bay_m: 6.0,    // column grid the distributed load is judged over
         access_side: "south",     // wall the loading door and service route land on
         crane_required_kg: 1200,  // above this a rack needs a lift, not a pallet jack
-        max_haul_m: 40,           // how far such a rack may be moved from that door
+        max_haul_m: 45,           // how far such a rack may be moved from that door
         tray_height_m: 3.2,     // data tray tier above finished floor
         power_tray_height_m: 3.8, // power tier -- physically separated from data
         data_tray_runs: 2,      // parallel tray baskets per aisle, per tier
@@ -53,8 +65,14 @@
         cdu_model: "cdu-inrow-1300",
         rdhx_model: "rdhx-100",
         redundancy: "N+1",      // "N" | "N+1" | "2N"
-        supply_c: 32,
-        return_c: 45,
+        // Warm water. The point of running the loop this hot is that 35 °C
+        // supply is above ambient wet-bulb almost everywhere, so the heat can be
+        // rejected by dry coolers and the chillers — and their power, and their
+        // water — come out of the design entirely. The wide ΔT is the other half
+        // of the trade: 15 K instead of 13 K is ~13% less flow for the same
+        // kilowatts, which is one bore size off every hose in the room.
+        supply_c: 35,
+        return_c: 50,
         containment: "hot-aisle",
         racks_per_cdu: 8,
         air_kw_per_rack_cap: 40, // practical ceiling for contained air
@@ -65,9 +83,11 @@
         volts: 415,
         phases: 3,
         entrances: 2,            // A and B services
-        entrance_kw: 1500,       // per entrance
+        // Each feed carries the whole hall alone, so this is sized against the
+        // full IT load rather than half of it.
+        entrance_kw: 2000,       // per entrance
         entrance_side: "west",   // wall the service lands on
-        ups_model: "ups-500",
+        ups_model: "ups-1250",
         ups_redundancy: "N+1",   // "N" | "N+1" | "2N"
         // The service lands once per feed on a switchboard lineup; the UPS
         // modules tap its bus and the RPP breakers live in its output section.
@@ -75,13 +95,20 @@
         // a section of this lineup, so it costs no feeder of its own.
         switchboard_model: "auto",
         maintenance_bypass: true,
-        distribution: "rpp",     // "rpp" | "busway"
+        // Overhead busway is what the current reference designs actually build:
+        // the run hangs over its own row and each cabinet takes a drop tap
+        // directly above it, so there is no horizontal whip to pull, re-pull, or
+        // trip over when a rack moves. The planner can see that too -- the whip
+        // distance term in the placement objective goes to zero under busway.
+        distribution: "busway",  // "rpp" | "busway"
         // "spine" puts the RPP column inside the rack block, between the UPS and
         // the load. "wall" parks it on the far wall — tidier drawing, and every
         // feeder then crosses the room while every whip crosses back. "auto"
         // takes the spine only where the room has the slots to pay for it.
         rpp_siting: "auto",      // "auto" | "spine" | "wall"
-        rpp_model: "rpp-400a",
+        // A 400 A panel is 230 kW derated -- under two Oberon racks. At this
+        // density the 600 A frame is the entry point, not the upgrade.
+        rpp_model: "rpp-600a",
         busway_model: "busway-800a",
         rack_pdu_model: "pdu-3ph-60a",
         pdus_per_rack: 2,        // A/B
@@ -90,14 +117,20 @@
         pue_target: 1.25,
       },
 
-      /* Fabric shape. `oversubscription` is downlink:uplink at the leaf. */
+      /* Fabric shape. `oversubscription` is downlink:uplink at the leaf.
+       *
+       * 800G end to end. ConnectX-8 presents 800G per port, so a 400G leaf would
+       * halve every GPU's fabric bandwidth at the first hop -- the most
+       * expensive bottleneck in the building, bought to save the cheapest line
+       * item. Non-blocking, because a rail-optimized training fabric that
+       * oversubscribes is one that stalls on the all-reduce. */
       fabric: {
         arch: "rail-optimized",  // "rail-optimized" | "tor" | "eor"
         oversubscription: 1,     // 1 | 2 | 4
         tiers: 2,                // 2 = leaf/spine, 3 = + super-spine across pods
-        leaf_model: "7060dx5-32",
-        spine_model: "7060dx5-64s",
-        super_model: "7800r4-128",
+        leaf_model: "7060x6-32pe",
+        spine_model: "7060x6-64pe",
+        super_model: "7800r4-128x800",
         oob_model: "7010tx-48",
         pod_racks: 8,            // racks per pod when tiers = 3
         emit_oob: true,
@@ -117,11 +150,19 @@
         penalty_usd_per_rack: 25000,
       },
 
-      /* Drives the traffic matrix used by partitioning and QAP placement. */
+      /* Drives the traffic matrix used by partitioning and QAP placement.
+       *
+       * Sized to fill the pod: 8 racks × 18 trays = 144 trays, and
+       * pp × dp = 4 × 36 = 144. Tensor parallel is 8-wide because a Vera Rubin
+       * tray presents 8 GPU dies, so TP rides NVLink inside the tray and never
+       * reaches the fabric -- which is the entire reason to buy a rack-scale
+       * unit. Push tp_size past 8 and the planner starts reporting TP links
+       * crossing rack boundaries: that warning is the job outgrowing the
+       * machine, not a layout defect. */
       workload: {
-        tp_size: 8,              // tensor-parallel GPUs (usually intra-node)
-        pp_size: 2,              // pipeline stages -- adjacent-group traffic
-        dp_replicas: 4,          // data-parallel replicas -- all-reduce ring
+        tp_size: 8,              // tensor-parallel GPUs -- one Vera Rubin tray
+        pp_size: 4,              // pipeline stages -- adjacent-group traffic
+        dp_replicas: 36,         // data-parallel replicas -- all-reduce ring
         collective: "all-reduce",
         base_affinity: 0.02,     // background any-to-any share
       },
@@ -179,10 +220,22 @@
     };
   }
 
+  /**
+   * The reference pod: one repeatable building block of an AI factory.
+   *
+   * Eight rack-scale GPU units is a pod because that is what the fabric wants --
+   * 8 racks of 18 trays is 144 endpoints per rail, which a 64-port 800G spine
+   * layer serves non-blocking without a third tier. Everything else in the list
+   * is what has to sit beside them for the pod to stand up on its own: two
+   * network racks for the leaf/spine layer, a storage rack to stage datasets
+   * into, and a management rack for the boot, OOB and telemetry plane.
+   *
+   * Scale out by repeating the whole block, not by adding GPU racks to this one.
+   */
   function buildDefaultRacks() {
     const racks = [];
     for (let i = 1; i <= 8; i++) {
-      racks.push(makeRack(`GPU-${DCP.Util.pad(i)}`, "gpu-dlc-b300"));
+      racks.push(makeRack(`GPU-${DCP.Util.pad(i)}`, "gpu-vr-nvl144"));
     }
     racks.push(makeRack("NET-01", "network-spine"));
     racks.push(makeRack("NET-02", "network-spine"));

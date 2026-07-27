@@ -56,6 +56,25 @@
     const oobSpec = C.SWITCHES[F.oob_model];
 
     const split = portSplit(leafSpec.ports, F.oversubscription);
+
+    /**
+     * A host link negotiates down to the slower end.
+     *
+     * An 800G ConnectX-8 plugged into a 400G leaf port is a 400G link, and it
+     * must be priced, reach-checked and drawn as one. Taking the NIC's word for
+     * it -- which is what this did -- meant a design that mixed a current NIC
+     * with a previous-generation leaf reported a fabric it does not have, and
+     * bought 800G optics to run at half speed.
+     *
+     * The mismatch is worth surfacing rather than silently absorbing: it is
+     * usually a procurement error, not a decision.
+     */
+    let clampedHosts = 0;
+    const hostLinkSpeed = (host) => {
+      if (host.nic_speed > leafSpec.speed) clampedHosts++;
+      return Math.min(host.nic_speed, leafSpec.speed);
+    };
+
     const switches = [];
     const links = [];
     const notes = [];
@@ -141,7 +160,7 @@
           if (!alloc) continue;
           links.push({
             label: `R${r}-${host.name}`,
-            class: "fabric", rail: r, speed: host.nic_speed,
+            class: "fabric", rail: r, speed: hostLinkSpeed(host),
             a: { device: host.name, port: `rail${r}`, rack: host.rackName },
             b: { device: alloc.leaf.id, port: `Ethernet${alloc.port}`, rack: rackNameOf(racks, alloc.leaf.rackId) },
             from_key: `rack:${host.rackId}`, to_key: `rack:${alloc.leaf.rackId}`,
@@ -166,7 +185,7 @@
             if (!alloc) continue;
             links.push({
               label: `H${n}-${host.name}`,
-              class: "fabric", rail: n, speed: host.nic_speed,
+              class: "fabric", rail: n, speed: hostLinkSpeed(host),
               a: { device: host.name, port: `net${n}`, rack: host.rackName },
               b: { device: alloc.leaf.id, port: `Ethernet${alloc.port}`, rack: rackNameOf(racks, alloc.leaf.rackId) },
               from_key: `rack:${host.rackId}`, to_key: `rack:${alloc.leaf.rackId}`,
@@ -212,7 +231,7 @@
             if (!alloc) continue;
             links.push({
               label: `H${n}-${host.name}`,
-              class: "fabric", rail: n, speed: host.nic_speed,
+              class: "fabric", rail: n, speed: hostLinkSpeed(host),
               a: { device: host.name, port: `rail${n}`, rack: rack.name },
               b: { device: alloc.leaf.id, port: `Ethernet${alloc.port}`, rack: rack.name },
               from_key: `rack:${rack.id}`, to_key: `rack:${rack.id}`, in_rack: true,
@@ -240,7 +259,7 @@
             if (!alloc) continue;
             links.push({
               label: `H${n}-${host.name}`,
-              class: "fabric", rail: n, speed: host.nic_speed,
+              class: "fabric", rail: n, speed: hostLinkSpeed(host),
               a: { device: host.name, port: `rail${n}`, rack: host.rackName },
               b: { device: alloc.leaf.id, port: `Ethernet${alloc.port}`, rack: homeRack.name },
               from_key: `rack:${host.rackId}`, to_key: `rack:${homeRack.id}`,
@@ -291,7 +310,14 @@
               const leafPort = split.down + uplink;
               links.push({
                 label: `L${leaf.tag !== undefined ? leaf.tag : li}S${si + 1}-U${uplink}`,
-                class: "fabric", speed: 400, tier: "leaf-spine",
+                // A link runs at the slower of the two ports it lands on. This
+                // used to be hardcoded to 400, which was right only for as long
+                // as every switch in the catalog was a 400G switch -- put an
+                // 800G leaf and an 800G spine either side of it and the entire
+                // fabric backbone was still being priced, sized and reach-checked
+                // as 400G.
+                class: "fabric", speed: Math.min(leafSpec.speed, spineSpec.speed),
+                tier: "leaf-spine",
                 a: { device: leaf.id, port: `Ethernet${leafPort}`, rack: rackNameOf(racks, leaf.rackId) },
                 b: { device: spine.id, port: `Ethernet${sPort}`, rack: rackNameOf(racks, spine.rackId) },
                 from_key: `rack:${leaf.rackId}`, to_key: `rack:${spine.rackId}`,
@@ -324,7 +350,8 @@
               superCursor.set(sup.id, sPort + 1);
               links.push({
                 label: `S${spine.name}X${si + 1}-U${up}`,
-                class: "fabric", speed: 400, tier: "spine-super",
+                class: "fabric", speed: Math.min(spineSpec.speed, superSpec.speed),
+                tier: "spine-super",
                 a: { device: spine.id, port: `Ethernet${spineDown + up}`, rack: rackNameOf(racks, spine.rackId) },
                 b: { device: sup.id, port: `Ethernet${sPort}`, rack: rackNameOf(racks, sup.rackId) },
                 from_key: `rack:${spine.rackId}`, to_key: `rack:${sup.rackId}`,
@@ -364,6 +391,12 @@
           }));
         }
       }
+    }
+
+    if (clampedHosts > 0) {
+      notes.push(`${clampedHosts} host link(s) negotiate down to ${leafSpec.speed}G — ` +
+        `the NIC is faster than the ${leafSpec.model} port it lands on, so the extra ` +
+        `NIC bandwidth is bought and not used`);
     }
 
     return {

@@ -83,6 +83,27 @@
           `${rack.name}: ${C.RACK_LAYOUTS[rack.layout].name} has no ${design.cooling.mode}-cooled variant`,
           rack.name);
       }
+
+      // Server count against what the layout physically permits. partition.js
+      // moves job ranks between racks to cut inter-rack traffic and can only
+      // honour capacity if a feasible packing exists; when one does not, it says
+      // so by over-filling. This is where that gets caught -- and it matters
+      // most for rack-scale units, where the limit is not shelf space but the
+      // fabric inside the rack: an NVL72's GPUs are wired together by the
+      // NVSwitch trays standing next to them, so a 19th compute tray is not a
+      // tight fit, it is a rack that cannot be built.
+      // Count only the layout's own SKU. Companions -- the nine NVSwitch trays
+      // that come with an NVL72 -- are seated by the layout itself and are not
+      // what `max_servers` bounds; including them would fail every rack-scale
+      // rack at 27 against a limit of 18.
+      const layout = C.RACK_LAYOUTS[rack.layout];
+      const seated = layout ? rack.servers.filter((s) => s.sku === layout.server).length : 0;
+      if (layout && layout.max_servers > 0 && seated > layout.max_servers) {
+        add("error", "rack.capacity",
+          `${rack.name}: ${seated} × ${layout.server} in a layout that takes ` +
+          `${layout.max_servers} — the partitioner could not fit the fleet in the racks it was given`,
+          rack.name);
+      }
     }
 
     /* ------------------------------------------------- floor collisions --- */

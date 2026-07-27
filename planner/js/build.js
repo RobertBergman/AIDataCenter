@@ -544,6 +544,10 @@
           cut_gbps: DCP.Util.round(partitionResult.cut, 1),
           baseline_cut_gbps: DCP.Util.round(partitionResult.baselineCut, 1),
           improvement_pct: pct(partitionResult.baselineCut, partitionResult.cut),
+          // True when KL/FM lost to the trivial fill and the fill was kept. Not
+          // a failure -- a large data-parallel ring is optimally cut by
+          // contiguous blocks, which is exactly what filling rack by rack does.
+          fell_back: !!partitionResult.fell_back,
           internal_gbps: DCP.Util.round(flow.internal, 1),
         },
         placement: {

@@ -31,8 +31,19 @@
     return adj;
   }
 
-  /** Heavy-edge matching: collapse each vertex with its heaviest free neighbour. */
-  function coarsen(n, adj, vwgt, rand) {
+  /**
+   * Heavy-edge matching: collapse each vertex with its heaviest free neighbour.
+   *
+   * `maxVwgt` caps how heavy a merged vertex may become, which is not a tuning
+   * knob but a correctness requirement. Coarsening is a bin-packing granularity
+   * decision: once a coarse vertex is heavier than the slack left in any rack,
+   * it can no longer be placed anywhere, and the initial partition has to dump
+   * it somewhere illegal. Eight NVL72 racks used to coarsen 144 trays into
+   * vertices of 8 against a cap of 18 -- two fit per rack, sixteen of the
+   * eighteen coarse vertices placed, and the last two landed on rack 0 because
+   * nothing else had room for them.
+   */
+  function coarsen(n, adj, vwgt, rand, maxVwgt = Infinity) {
     const match = new Int32Array(n).fill(-1);
     const order = [...Array(n).keys()];
     for (let i = order.length - 1; i > 0; i--) {
@@ -48,6 +59,7 @@
       let bestW = -1;
       for (const { to, w } of adj[v]) {
         if (map[to] >= 0) continue;
+        if (vwgt[v] + vwgt[to] > maxVwgt) continue;
         // Prefer the heaviest edge; tie-break on the lighter vertex to keep
         // merged weights even (an unbalanced coarse graph partitions badly).
         if (w > bestW || (w === bestW && best >= 0 && vwgt[to] < vwgt[best])) {
@@ -146,7 +158,17 @@
         if (load[p] + vwgt[v] > caps[p]) continue;
         if (best < 0 || load[p] < load[best]) best = p;
       }
-      if (best < 0) best = 0; // over-subscribed: validate.js will flag it
+      // Genuinely nowhere to put it. Take the part that ends up least over its
+      // cap rather than always part 0 -- dumping every homeless vertex on the
+      // same rack turned a design that was a few slots short overall into one
+      // rack at 178% and the rest under-filled. `rebalance` gets a chance at it
+      // afterwards, and validate.js reports whatever survives.
+      if (best < 0) {
+        best = 0;
+        for (let p = 1; p < P; p++) {
+          if (load[p] - caps[p] < load[best] - caps[best]) best = p;
+        }
+      }
       part[v] = best;
       load[best] += vwgt[v];
       remaining.delete(v);
@@ -170,17 +192,88 @@
   }
 
   /**
+   * Empty out any part standing over its capacity.
+   *
+   * FM cannot do this itself, and not by oversight: it selects moves by *gain*,
+   * and its feasibility guards only ever ask whether the destination has room.
+   * A part that is already over its cap is not a state FM is trying to leave, so
+   * an overloaded rack survives refinement untouched whenever draining it would
+   * cost cut -- which it essentially always does, because the vertices sitting
+   * on that rack are there precisely because they talk to each other.
+   *
+   * Repair therefore has to be its own objective. Take the most overloaded part,
+   * evict whichever vertex is cheapest to lose (highest gain, usually least
+   * negative), and repeat. Every eviction strictly reduces total overload, so
+   * this terminates; when nothing can move the design really is short of slots
+   * and validate.js says so.
+   */
+  function rebalance(n, adj, vwgt, part, load, caps, conn, applyMove) {
+    const P = caps.length;
+    let moved = 0;
+
+    for (let guard = 0; guard <= n; guard++) {
+      let src = -1;
+      let worst = 1e-9;
+      for (let p = 0; p < P; p++) {
+        if (load[p] - caps[p] > worst) {
+          worst = load[p] - caps[p];
+          src = p;
+        }
+      }
+      if (src < 0) break;
+
+      let best = null;
+      for (let v = 0; v < n; v++) {
+        if (part[v] !== src) continue;
+        for (let t = 0; t < P; t++) {
+          if (t === src || load[t] + vwgt[v] > caps[t]) continue;
+          const g = conn[v * P + t] - conn[v * P + src];
+          // Tie-break on the heaviest vertex, then on index: clearing the
+          // overload in fewer moves disturbs the layout less, and the index
+          // keeps the whole thing deterministic.
+          if (!best || g > best.g
+              || (g === best.g && vwgt[v] > vwgt[best.v])) {
+            best = { v, t, g };
+          }
+        }
+      }
+      if (!best) break;
+
+      applyMove(best.v, src, best.t);
+      moved++;
+    }
+    return moved;
+  }
+
+  /**
    * FM refinement with best-prefix rollback.
    *
    * Each pass builds a sequence of tentative moves/swaps, always taking the
    * highest-gain feasible one among unlocked boundary vertices -- including
    * negative-gain ones, which is what lets it escape local minima -- then
    * rewinds to the prefix with the best cumulative gain.
+   *
+   * Capacity repair runs first. FM's own guards never create an overload, but
+   * they never clear an inherited one either, and every uncoarsening level
+   * inherits whatever the level above could not place.
    */
   function fmRefine(n, adj, vwgt, part, load, caps) {
     const P = caps.length;
     let conn = buildConn(n, P, adj, part);
     let totalGain = 0;
+
+    {
+      const apply = (v, from, to) => {
+        part[v] = to;
+        load[from] -= vwgt[v];
+        load[to] += vwgt[v];
+        for (const { to: u, w } of adj[v]) {
+          conn[u * P + from] -= w;
+          conn[u * P + to] += w;
+        }
+      };
+      rebalance(n, adj, vwgt, part, load, caps, conn, apply);
+    }
 
     for (let pass = 0; pass < MAX_PASSES; pass++) {
       const locked = new Uint8Array(n);
@@ -315,20 +408,55 @@
       }
     }
     const baselineCut = cutOf(edges, naive);
+    // Naive fill is only a legal answer if it actually respects capacity: the
+    // loop above lets the final part absorb the remainder, which overflows when
+    // the fleet is bigger than the racks.
+    const naiveLegal = (() => {
+      const load = new Float64Array(P);
+      for (let v = 0; v < n; v++) load[naive[v]]++;
+      for (let p = 0; p < P; p++) if (load[p] > caps[p]) return false;
+      return true;
+    })();
+
+    /**
+     * Never hand back something worse than the baseline we measure against.
+     *
+     * KL/FM is a local-search heuristic and there is no guarantee it beats a
+     * trivial fill -- and one workload where it reliably does not is a large
+     * data-parallel ring, because a ring's optimal cut *is* contiguous blocks,
+     * which is precisely what filling rack by rack produces. Refining from a
+     * graph-growing seed then wanders away from an arrangement it cannot
+     * recognise as already good.
+     *
+     * Taking the better of the two costs one comparison and removes the
+     * possibility of the optimiser being an active liability.
+     */
+    const bestOf = (part, cut, levels) => {
+      if (naiveLegal && baselineCut < cut - 1e-9) {
+        return { part: naive, cut: baselineCut, baselineCut, levels, fell_back: true };
+      }
+      return { part, cut, baselineCut, levels, fell_back: false };
+    };
 
     if (opts.coarsen === false || n <= P * 4) {
       const adj = buildLevel(n, edges);
       const vwgt = new Float64Array(n).fill(1);
       const { part, load } = initialPartition(n, adj, vwgt, caps);
       fmRefine(n, adj, vwgt, part, load, caps);
-      return { part, cut: cutOf(edges, part), baselineCut, levels: 1 };
+      return bestOf(part, cutOf(edges, part), 1);
     }
 
     // --- coarsen ---------------------------------------------------------
+    // Keep coarse vertices small enough to still pack. A quarter of the tightest
+    // rack is the usual rule of thumb: fine enough that the remainder after
+    // filling a rack can always go somewhere, coarse enough that the multilevel
+    // scheme still buys anything.
+    const maxVwgt = Math.max(1, Math.floor(Math.min(...caps) / 4));
+
     const levels = [];
     let cur = { n, edges, adj: buildLevel(n, edges), vwgt: new Float64Array(n).fill(1) };
     while (cur.n > P * 4 && levels.length < 20) {
-      const next = coarsen(cur.n, cur.adj, cur.vwgt, rand);
+      const next = coarsen(cur.n, cur.adj, cur.vwgt, rand, maxVwgt);
       if (next.n >= cur.n * 0.95) break; // matching stalled
       levels.push({ fine: cur, map: next.map });
       cur = { n: next.n, edges: next.edges, adj: next.adj, vwgt: next.vwgt };
@@ -351,7 +479,7 @@
       cur = fine;
     }
 
-    return { part, cut: cutOf(edges, part), baselineCut, levels: levels.length + 1 };
+    return bestOf(part, cutOf(edges, part), levels.length + 1);
   }
 
   DCP.Partition = { partition, cutOf, coarsen, initialPartition, fmRefine };

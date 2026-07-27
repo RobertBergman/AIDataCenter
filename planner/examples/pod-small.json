@@ -3,18 +3,18 @@
     "name": "pod-small",
     "room": "Pod A",
     "tenant": "research",
-    "description": "Compact 4-rack liquid-cooled pod — planner example"
+    "description": "Compact 2-rack GB300 NVL72 pod \u2014 planner example"
   },
   "room": {
-    "width_m": 12,
-    "depth_m": 10,
-    "clear_height_m": 4.5,
+    "width_m": 14,
+    "depth_m": 11,
+    "clear_height_m": 5.2,
     "tile_m": 0.6,
     "perimeter_m": 1.2,
     "cold_aisle_m": 1.8,
     "hot_aisle_m": 1.2,
     "raised_floor": false,
-    "floor_capacity_kg_m2": 1220,
+    "floor_capacity_kg_m2": 2500,
     "tray_height_m": 3.2,
     "power_tray_height_m": 3.8,
     "data_tray_runs": 2,
@@ -28,8 +28,8 @@
     "cdu_model": "cdu-inrow-1300",
     "rdhx_model": "rdhx-100",
     "redundancy": "N+1",
-    "supply_c": 32,
-    "return_c": 45,
+    "supply_c": 35,
+    "return_c": 50,
     "containment": "hot-aisle",
     "racks_per_cdu": 8,
     "air_kw_per_rack_cap": 40
@@ -55,17 +55,17 @@
     "arch": "rail-optimized",
     "oversubscription": 1,
     "tiers": 2,
-    "leaf_model": "7060dx5-32",
-    "spine_model": "7060dx5-64s",
-    "super_model": "7800r4-128",
+    "leaf_model": "7060x6-32pe",
+    "spine_model": "7060x6-64pe",
+    "super_model": "7800r4-128x800",
     "oob_model": "7010tx-48",
     "pod_racks": 8,
     "emit_oob": true
   },
   "workload": {
-    "tp_size": 16,
+    "tp_size": 8,
     "pp_size": 2,
-    "dp_replicas": 2,
+    "dp_replicas": 18,
     "collective": "all-reduce",
     "base_affinity": 0.02
   },
@@ -87,17 +87,17 @@
     {
       "id": "r1",
       "name": "GPU-01",
-      "layout": "gpu-dlc-b300",
-      "rack_type": "750-52u",
-      "servers": 8,
+      "layout": "gpu-gb300-nvl72",
+      "rack_type": "oberon-rack",
+      "servers": 18,
       "pinned": null
     },
     {
       "id": "r2",
       "name": "GPU-02",
-      "layout": "gpu-dlc-b300",
-      "rack_type": "750-52u",
-      "servers": 8,
+      "layout": "gpu-gb300-nvl72",
+      "rack_type": "oberon-rack",
+      "servers": 18,
       "pinned": null
     },
     {

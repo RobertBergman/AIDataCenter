@@ -18,7 +18,17 @@
 (function (root) {
   const DCP = (root.DCP = root.DCP || {});
 
-  const DLC_RACK_CAP_KW = 150;   // what a direct-liquid rack + manifold can take
+  /**
+   * What a direct-liquid rack and its manifold can take.
+   *
+   * 150 kW covered the GB200/GB300 generation with a little headroom, and stops
+   * dead at the next one: Rubin Ultra on the Kyber frame is a 600 kW rack, and
+   * the vendors' own 2027 roadmaps are built around it. Raised to 250 kW, which
+   * is what a current Oberon-class manifold and quick-disconnect set will pass
+   * -- enough for anything shipping, and still a real ceiling that reports
+   * rather than silently accepting a rack nothing can plumb.
+   */
+  const DLC_RACK_CAP_KW = 250;
   const RESIDUAL_AIR_FRACTION = 0.1; // heat DLC leaves for the air path (PSUs, DIMMs, NICs)
 
   function redundancyFactor(mode) {

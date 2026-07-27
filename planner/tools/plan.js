@@ -170,7 +170,12 @@ function printReport(model, ms) {
   }
 
   console.log("\nOPTIMIZATION");
-  line("partition cut", `${o.partition.cut_gbps} GB/s (baseline ${o.partition.baseline_cut_gbps}, −${o.partition.improvement_pct}%)`);
+  // Signed, because the improvement can legitimately be zero: when naive fill
+  // already has the best cut the partitioner keeps it, and a hardcoded minus
+  // printed that as "−-10.1%".
+  const signed = (v) => (v > 0 ? `−${v}%` : v < 0 ? `+${-v}%` : "no change");
+  line("partition cut", `${o.partition.cut_gbps} GB/s (baseline ${o.partition.baseline_cut_gbps}, ${signed(o.partition.improvement_pct)})` +
+    (o.partition.fell_back ? " · kept the sequential fill, KL/FM could not beat it" : ""));
   const p = o.placement;
   const usd = (v) => `$${(v || 0).toLocaleString("en-US")}`;
   const pctOf = (base, now) => (base > 0 ? Math.round(((base - now) / base) * 1000) / 10 : 0);
